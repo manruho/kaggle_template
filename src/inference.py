@@ -1,0 +1,22 @@
+"""Inference helpers."""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+
+def predict(model: Any, X: pd.DataFrame, task_type: str) -> np.ndarray:
+    """Return numpy predictions for ``X`` depending on ``task_type``."""
+
+    if task_type in {"binary", "multiclass"}:
+        if hasattr(model, "predict_proba"):
+            proba = model.predict_proba(X)
+            if task_type == "binary":
+                return np.asarray(proba)[:, 1]
+            return np.asarray(proba)
+        preds = model.predict(X)
+        return np.asarray(preds)
+    preds = model.predict(X)
+    return np.asarray(preds)
