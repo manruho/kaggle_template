@@ -22,6 +22,7 @@ class ArtifactPaths:
     oof_path: str
     metrics_path: str
     config_copy_path: str
+    meta_path: str
 
     @classmethod
     def from_root(cls, root: str) -> "ArtifactPaths":
@@ -31,4 +32,5 @@ class ArtifactPaths:
             oof_path=os.path.join(root, "oof.csv"),
             metrics_path=os.path.join(root, "cv_scores.json"),
             config_copy_path=os.path.join(root, "config_used.json"),
+            meta_path=os.path.join(root, "meta.json"),
         )

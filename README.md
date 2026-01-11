@@ -11,6 +11,7 @@ kaggle-template/
     config_io.py
     data.py
     features.py
+    feature_store.py
     models.py
     split.py
     train.py
@@ -91,7 +92,7 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
 
 1. 新規コンペ用の `configs/comp_xxx.json` を作成。
 2. Notebook から `load_config` → `run(cfg)` を呼び、OOF・提出を生成。
-3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json` として保存。
+3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` として保存。
 4. Kaggle の提出や外部分析は保存された成果物を参照するだけで良い。
 5. 改良（特徴量やモデル）を行ったら GitHub に commit → push、Notebook は再 clone or Dataset 更新のみ。
 
@@ -153,6 +154,24 @@ def build_feature_frames(train_df, test_df, config):
 - 設定ファイルで `features` リストを与えると、使用する列を固定できます。自動選択したい場合は `drop_cols` に不要列を入れるだけ。
 - 高度な処理が必要になったら `src/features/` 配下にモジュールを増やし、`build_feature_frames` から呼び出す形に整理すると拡張しやすいです。
 
+## 特徴量キャッシュ（FeatureStore）
+
+同じ特徴量を何度も再計算しないように、`src/feature_store.py` が `build_feature_frames()` の結果をディスクにキャッシュできます。
+
+`configs/*.json` に以下を追加すると有効になります（未指定なら無効のままです）:
+
+```json
+{
+  "use_feature_cache": true,
+  "features_version": "v1",
+  "feature_cache_dir": "outputs/_cache/features",
+  "feature_cache_format": "auto"
+}
+```
+
+- `features_version` は特徴量ロジックを変えたら更新してください（古いキャッシュを誤って使う事故を防ぎます）。
+- `feature_cache_format` は `auto` / `parquet` / `pickle`（`auto` は parquet を試して失敗したら pickle にフォールバック）。
+
 ## モデルを変更・追加する
 
 ### 設定だけで切り替える
@@ -200,6 +219,7 @@ OOF も `res_lgb.oof` などから取得できるため、外部で stacking モ
 - `Config.output_dir` と `experiment_name` を設定すると `outputs/<experiment_name>/` の直下に成果物がまとまります。
 - `config_used.json` は実行時点の設定を必ずコピーするので、後から「どのパラメータで回したか」を追跡できます。
 - `cv_scores.json` で fold ごとのスコアを確認可能。
+- `meta.json` に CV のサマリや環境情報（python / package version / git commit など）を保存します。
 - `oof.csv` には `id` + `oof_target` を書き出しており、外部メタモデルやブレンディングに流用できます。
 - 追加でメトリクスやログを残したい場合は `experiment.py` の `_write_artifacts` を拡張してください（例: `feature_importance.csv` や `training_log.json` を保存）。
 

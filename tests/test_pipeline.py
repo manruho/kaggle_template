@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
         model_params={"max_iter": 200},
         output_dir=str(tmp_path / "outputs"),
         experiment_name="test_run",
+        extras={"use_feature_cache": True, "features_version": "test_v1"},
     )
 
     result = run(config)
@@ -57,3 +59,22 @@ def test_run_pipeline(tmp_path: Path) -> None:
     assert result.submission.shape[0] == len(test_df)
     assert len(result.scores) == config.n_splits
     assert Path(config.output_dir).exists()
+
+    artifact_dir = Path(config.output_dir) / str(config.experiment_name)
+    assert (artifact_dir / "submission.csv").exists()
+    assert (artifact_dir / "oof.csv").exists()
+    assert (artifact_dir / "cv_scores.json").exists()
+    assert (artifact_dir / "config_used.json").exists()
+    assert (artifact_dir / "meta.json").exists()
+
+    meta_first = json.loads((artifact_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta_first["feature_cache"]["enabled"] is True
+    assert meta_first["feature_cache"]["cache_hit"] is False
+
+    run(config)
+    meta_second = json.loads((artifact_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta_second["feature_cache"]["enabled"] is True
+    assert meta_second["feature_cache"]["cache_hit"] is True
+
+    cache_root = Path(meta_second["feature_cache"]["cache_dir"]) / meta_second["feature_cache"]["cache_key"]
+    assert (cache_root / "meta.json").exists()
