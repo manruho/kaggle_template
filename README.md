@@ -1,110 +1,177 @@
 # Kaggle Template
 
-Kaggle ノートブックを「GitHub から直接 clone して使う」「Kaggle Dataset として添付して使う」のどちらでも再利用できるテンプレートです。実験ロジックは `src/` 以下に閉じ込め、Notebook 側は `load_config` と `run(cfg)` を呼ぶだけで済む構成になっています。
+Kaggle の実験を **「Notebookは薄く」**、**「ロジックは `src/` に閉じ込める」** 方針で回すためのテンプレートです。
 
-## ディレクトリ構成
+- Kaggle Notebook から **GitHub を clone（Internet ON）** して使える
+- Internet OFF のコンペでも **Kaggle Dataset に添付**して使える
+- Notebook 側は基本 **`load_config` → `run(cfg)` の呼び出しだけ**
+- 実験成果物は `outputs/<experiment_name>/` に保存して再現性を担保
+
+> 目標：  
+> **「実験を増やす＝configを増やす」**  
+> **「Notebookは実行ボタン」**  
+> **「当たり実験を二度と失わない」**
+
+---
+
+## Directory Structure
+
+（例：現状の構成を想定）
 
 ```
+
 kaggle-template/
-  src/
-    config.py
-    config_io.py
-    data.py
-    features.py
-    feature_store.py
-    models.py
-    split.py
-    train.py
-    inference.py
-    experiment.py
-    utils.py
-  configs/
-    default.json
-  tests/
-    test_pipeline.py
-  scripts/
-    package_dataset.py
-  README.md
-```
+src/
+config.py
+config_io.py
+data.py
+features.py
+feature_store.py
+models.py
+split.py
+train.py
+inference.py
+experiment.py
+utils.py
+configs/
+default.json
+tests/
+test_pipeline.py
+scripts/
+package_dataset.py
+README.md
 
-各コンペ固有の設定値（データのパスやメトリックなど）は `configs/*.json` に集約します。Python コードは汎用的な処理のみを保持します。
+````
 
-### 役割とデータフロー
+- **コンペ固有の設定**（データパス、メトリック、CV、モデル）は `configs/*.json` に集約
+- `src/` には **汎用的な処理**のみを置く（Notebookにロジックを書かない）
 
-1. `src/config_io.py` で JSON → `Config` オブジェクトへ変換。
-2. `src/experiment.py` の `run(cfg)` がパイプラインを司令塔として実行。
-3. `src/data.py` で CSV を読み込み、`debug` オプションで試行を軽量化。
-4. `src/features.py` で使用する列を選択し、カテゴリのダミー化や結合を実施。
-5. `src/split.py` で CV の分割方法（KFold/Stratified/Group）を決定。
-6. `src/models.py` が `model_name` から学習器を生成。
-7. `src/train.py` で `train_cv` を実行し、OOF・CV スコア・テスト予測を得る。
-8. `src/utils.py` と `experiment.py` が提出ファイル、OOF、スコアログ、使用した config を `outputs/` に保存。
+---
 
-このように Notebook からは `run(cfg)` 一発で全処理が起動するため、コード本体の変更は GitHub 側に集中させられます。
+## Pipeline Overview
 
-## 使い方（GitHub から clone / Internet ON）
+`run(cfg)` が司令塔としてパイプラインを実行します（概念図）：
 
-1. Notebook の Internet を ON にする。
-2. 冒頭でリポジトリを clone し、`sys.path` に追加する。
+1. `config_io`：JSON → `Config`（または dict）にロード  
+2. `data`：学習/推論データの読み込み（`debug` で軽量化）
+3. `features`：特徴量生成（必要に応じてダミー化/結合）
+4. `split`：CV 分割（KFold / Stratified / Group など）
+5. `models`：`model_name` から学習器生成（factory）
+6. `train`：CV 学習 → OOF / fold score / test pred
+7. `inference`：提出用 DataFrame 作成
+8. `experiment` / `utils`：成果物を `outputs/` に保存
+
+Notebook からは **`run(cfg)` 一発**で全処理が起動するため、変更は GitHub 側に集中できます。
+
+---
+
+## Quick Start (Kaggle Notebook / Internet ON)
+
+### 1) Notebook Settings
+- **Internet**: ON  
+- **Accelerator**: None（CPU）または GPU（使えるなら）
+
+### 2) Clone & Run
 
 ```python
-!git clone https://github.com/<you>/kaggle-template.git
+# clone
+!rm -rf /kaggle/working/kaggle-template
+!git clone https://github.com/manruho/kaggle_template /kaggle/working/kaggle-template
+
+# import
 import sys
-sys.path.append("/kaggle/working/kaggle-template")
+sys.path.insert(0, "/kaggle/working/kaggle-template")
 
 from src.config_io import load_config
 from src.experiment import run
 
 cfg = load_config("/kaggle/working/kaggle-template/configs/default.json")
 result = run(cfg)
+result
+````
+
+> 更新の反映：
+> GitHub に push → Notebook を再実行（cloneし直す）だけで反映されます。
+
+---
+
+## Usage (Kaggle Dataset / Internet OFF)
+
+Internet OFF コンペでは、テンプレを zip にして Kaggle Dataset として添付します。
+
+### 1) Zip を作る（ローカル）
+
+```bash
+python scripts/package_dataset.py --output kaggle_template_lib.zip
 ```
 
-GitHub 上でテンプレートを更新すると、clone している Notebook 全てに自動で反映されます。
+### 2) Kaggle Dataset を作成
 
-## 使い方（Dataset 経由 / Internet OFF）
+* `kaggle_template_lib.zip` をアップロード
 
-1. ローカルで `python scripts/package_dataset.py --output kaggle_template_lib.zip` を実行し、`src/` と `configs/` をまとめた zip を作成。
-2. Kaggle の Dataset を新規作成し、zip をアップロード。
-3. Notebook でその Dataset を「Add data」し、working ディレクトリにコピーして import する。
+### 3) Notebook で読み込んで実行
 
 ```python
 from pathlib import Path
-import shutil, sys
+import shutil
+import sys
 
-LIB_ROOT = Path("/kaggle/input/kaggle-template-lib")  # 自分の Dataset 名に合わせる
+# ここは Dataset 名に合わせる
+LIB_ROOT = Path("/kaggle/input/kaggle-template-lib/kaggle-template")
 WORK_ROOT = Path("/kaggle/working/kaggle-template")
 
-if not WORK_ROOT.exists():
-    shutil.copytree(LIB_ROOT, WORK_ROOT)
+if WORK_ROOT.exists():
+    shutil.rmtree(WORK_ROOT)
+shutil.copytree(LIB_ROOT, WORK_ROOT)
 
-sys.path.append(str(WORK_ROOT))
+sys.path.insert(0, str(WORK_ROOT))
 
 from src.config_io import load_config
 from src.experiment import run
 
 cfg = load_config(str(WORK_ROOT / "configs" / "default.json"))
 result = run(cfg)
+result
 ```
 
-Internet が OFF のコンペでも同じワークフローでテンプレートを利用できます。
+---
 
-## 一連の運用フロー
+## Outputs (Experiment Artifacts)
 
-1. 新規コンペ用の `configs/comp_xxx.json` を作成。
-2. Notebook から `load_config` → `run(cfg)` を呼び、OOF・提出を生成。
-3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` として保存。
-4. Kaggle の提出や外部分析は保存された成果物を参照するだけで良い。
-5. 改良（特徴量やモデル）を行ったら GitHub に commit → push、Notebook は再 clone or Dataset 更新のみ。
+各実験の成果物は以下に保存されます：
 
-## コンフィグ（configs/*.json）の考え方
+```
+outputs/<experiment_name>/
+  submission.csv
+  oof.csv
+  cv_scores.json
+  config_used.json
+  meta.json
+```
 
-- `train_path`, `test_path`, `sample_sub_path`
-- `id_col`, `target_col`
-- `task_type`, `metric`, `cv_type`, `n_splits`, `seed`
-- `model_name`, `model_params`
-- 追加で必要な値は `extras` として自由に定義
+* `submission.csv`：提出用
+* `oof.csv`：OOF（アンサンブル/stacking用）
+* `cv_scores.json`：fold score
+* `config_used.json`：実行時点の config（再現性）
+* `meta.json`：CVサマリや環境情報（任意：commit hash / versions）
 
-例:
+> ルール：
+> **実験結果は `outputs/` を見れば全部わかる**状態を目指します。
+
+---
+
+## Config Design (configs/*.json)
+
+基本キー（例）：
+
+* `train_path`, `test_path`, `sample_sub_path`
+* `id_col`, `target_col`
+* `task_type`, `metric`
+* `cv_type`, `n_splits`, `seed`
+* `model_name`, `model_params`
+* 追加パラメータ：`extras`（自由枠）
+
+Example:
 
 ```json
 {
@@ -122,43 +189,47 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
   "model_params": {
     "learning_rate": 0.05,
     "num_leaves": 64
+  },
+  "extras": {
+    "debug": false
   }
 }
 ```
 
-コンペ切り替え時は JSON だけ差し替えれば Notebook の修正を最小化できます。
+### extras について
 
-### 付加情報を渡す
+`extras` は「このコンペだけ必要な値」を逃がすための自由枠です。例：
 
-`Config` には `extras` という自由枠があります。`configs/*.json` に `group_col`, `use_gpu` など任意のキーを追加すると `config.get("group_col")` のように取得できます。分割にグループ列を使う、特徴量処理を切り替える、といった条件分岐に便利です。
+* `group_col`（GroupKFold用）
+* `use_gpu`（GPUの有無で分岐）
+* `features_version`（特徴量版管理）
 
-## 特徴量エンジニアリングを追加する
+---
 
-`src/features.py` を編集して処理を差し込むのが基本です。
+## Feature Engineering
+
+基本は `src/features.py` を編集して特徴量を足します。
 
 ```python
-# 例: 新しいカテゴリ集約特徴を追加
-def build_feature_frames(train_df, test_df, config):
-    # 既存の列選択
-    ...
-    # 追加の特徴量
+def build_feature_frames(train_df, test_df, cfg):
+    # 例：特徴量追加（破壊を避けたいなら copy() 推奨）
+    X_train = train_df.copy()
+    X_test = test_df.copy()
+
     for df in (X_train, X_test):
         df["amount_per_unit"] = df["amount"] / (df["units"] + 1e-3)
-        df["city_country"] = df["city"] + "_" + df["country"]
-    return _align_dummies(X_train, X_test)
+        df["city_country"] = df["city"].astype(str) + "_" + df["country"].astype(str)
+
+    return X_train, X_test
 ```
 
-ポイント:
+---
 
-- 元の `train_df` / `test_df` を破壊したくない場合は `copy()` してから加工。
-- 設定ファイルで `features` リストを与えると、使用する列を固定できます。自動選択したい場合は `drop_cols` に不要列を入れるだけ。
-- 高度な処理が必要になったら `src/features/` 配下にモジュールを増やし、`build_feature_frames` から呼び出す形に整理すると拡張しやすいです。
+## Feature Cache (FeatureStore)
 
-## 特徴量キャッシュ（FeatureStore）
+同じ特徴量を何度も計算しないために、`feature_store.py` を使ってキャッシュできます。
 
-同じ特徴量を何度も再計算しないように、`src/feature_store.py` が `build_feature_frames()` の結果をディスクにキャッシュできます。
-
-`configs/*.json` に以下を追加すると有効になります（未指定なら無効のままです）:
+Config 例：
 
 ```json
 {
@@ -169,19 +240,22 @@ def build_feature_frames(train_df, test_df, config):
 }
 ```
 
-- `features_version` は特徴量ロジックを変えたら更新してください（古いキャッシュを誤って使う事故を防ぎます）。
-- `feature_cache_format` は `auto` / `parquet` / `pickle`（`auto` は parquet を試して失敗したら pickle にフォールバック）。
+* `features_version`：特徴量ロジックを変えたら更新（事故防止）
+* `feature_cache_format`：`auto` / `parquet` / `pickle`
 
-## モデルを変更・追加する
+---
 
-### 設定だけで切り替える
+## Model Switching / Add Models
 
-`configs/*.json` の `model_name` を `logistic_regression` → `lightgbm` などに変えるだけで、`src/models.py` のファクトリが対応モデルを返します。`model_params` で LightGBM や XGBoost のハイパーパラメータも渡せます。
+### config だけで切り替える
 
-### 新しいモデルクラスを追加する
+`model_name` を変えるだけで学習器を切り替えられる設計を推奨します。
 
-1. `src/models.py` に分岐を追加。
-2. 必要なライブラリを `pyproject.toml`（または Kaggle Notebook 側の `pip install`）で導入。
+例：`lightgbm`, `xgboost`, `catboost`, `logistic_regression` など
+
+### 新しいモデルの追加
+
+`src/models.py` に factory を追加し、必要ならライブラリを導入します。
 
 ```python
 if name == "catboost":
@@ -189,64 +263,71 @@ if name == "catboost":
     return CatBoostClassifier(verbose=0, **params)
 ```
 
-Notebook から何も変更せずに config のみで切り替えられるよう意識するのがポイントです。
+> Notebook は変えず、configだけで切り替えられるようにするのがポイントです。
 
-## アンサンブルを回す
+---
 
-テンプレ本体は 1 実験 = 1 `Config` の思想でシンプルさを維持します。アンサンブルや stacking は Notebook 側で複数の config を読み込み、`run(cfg)` を複数回呼び出して合成します。
+## Ensemble (Blending / Stacking)
+
+テンプレ本体は「1 config = 1 実験」を守ってシンプルにします。
+アンサンブルは Notebook 側で複数実験を回して合成します。
 
 ```python
 from src.config_io import load_config
 from src.experiment import run
 import numpy as np
 
-cfg_lgb = load_config("configs/comp_lgb.json")
-cfg_xgb = load_config("configs/comp_xgb.json")
+cfg_a = load_config("configs/comp_a.json")
+cfg_b = load_config("configs/comp_b.json")
 
-res_lgb = run(cfg_lgb)
-res_xgb = run(cfg_xgb)
+res_a = run(cfg_a)
+res_b = run(cfg_b)
 
-ensemble_pred = 0.6 * res_lgb.predictions_test + 0.4 * res_xgb.predictions_test
-submission = res_lgb.submission.copy()
-submission["target"] = ensemble_pred
-submission.to_csv("/kaggle/working/submission.csv", index=False)
+pred = 0.6 * res_a.predictions_test + 0.4 * res_b.predictions_test
+sub = res_a.submission.copy()
+sub["target"] = pred
+sub.to_csv("/kaggle/working/submission.csv", index=False)
 ```
 
-OOF も `res_lgb.oof` などから取得できるため、外部で stacking モデルを学習させることも容易です。
+---
 
-## 実験管理
-
-- `Config.output_dir` と `experiment_name` を設定すると `outputs/<experiment_name>/` の直下に成果物がまとまります。
-- `config_used.json` は実行時点の設定を必ずコピーするので、後から「どのパラメータで回したか」を追跡できます。
-- `cv_scores.json` で fold ごとのスコアを確認可能。
-- `meta.json` に CV のサマリや環境情報（python / package version / git commit など）を保存します。
-- `oof.csv` には `id` + `oof_target` を書き出しており、外部メタモデルやブレンディングに流用できます。
-- 追加でメトリクスやログを残したい場合は `experiment.py` の `_write_artifacts` を拡張してください（例: `feature_importance.csv` や `training_log.json` を保存）。
-
-## テスト
+## Testing
 
 ```bash
-cd kaggle-template
 pip install -e .[test]
 pytest
 ```
 
-`tests/test_pipeline.py` では合成データを生成し、`run(cfg)` が学習・OOF 出力・提出ファイルの作成まで行えることを確認します。
+`tests/test_pipeline.py` では、合成データで `run(cfg)` が最後まで動き、
+成果物が生成されることを確認します。
 
-## Dataset 用パッケージング
+---
 
-`scripts/package_dataset.py` を実行すると、`src/` と `configs/`（および README）を 1 つの zip にまとめます。Kaggle Dataset にアップロードしておくと、Internet OFF の Notebook からも簡単に利用できます。
+## Packaging for Kaggle Dataset
 
-```
+Internet OFF 用に zip を作ります：
+
+```bash
 python scripts/package_dataset.py --output kaggle_template_lib.zip
 ```
 
-作成された zip は `.gitignore` に含めており、誤ってコミットされません。
+作成物は `.gitignore` に入れて誤コミットを防ぐのがおすすめです。
 
-## よくある拡張
+---
 
-- `metric` の種類を増やす、タスク別の pipeline を追加する
-- `src/features.py` / `src/models.py` に特徴量生成・モデルスイッチを追加
-- 画像や NLP など用途別に `src/tasks/` で切り替える
+## Recommended Extensions
 
-まずは骨格としてこのテンプレートを育て、GitHub で履歴管理しつつ Kaggle Notebook では `run(cfg)` を呼ぶだけの運用を目指してください。
+* `metric` の種類追加、タスク別 pipeline
+* `src/features.py` / `src/models.py` の拡張
+* `src/tasks/` を作って tabular / nlp / image を切替
+* `meta.json` に commit hash / versions を保存して実験台帳化
+* OOF を使った重み最適化 blend（終盤の伸びに効く）
+
+---
+
+## Philosophy
+
+* Notebook は **実行ボタン**
+* 実験の差分は **config**
+* 成果物は **outputs に全部**
+* 当たり実験を **消さない・忘れない・再現できる**
