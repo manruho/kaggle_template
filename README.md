@@ -7,41 +7,52 @@ Kaggle の実験を **「Notebookは薄く」**、**「ロジックは `src/` �
 - Notebook 側は基本 **`load_config` → `run(cfg)` の呼び出しだけ**
 - 実験成果物は `outputs/<experiment_name>/` に保存して再現性を担保
 
-> 目標：  
-> **「実験を増やす＝configを増やす」**  
-> **「Notebookは実行ボタン」**  
+> 目標：
+> **「実験を増やす＝configを増やす」**
+> **「Notebookは実行ボタン」**
 > **「当たり実験を二度と失わない」**
 
 ---
 
 ## Directory Structure
 
-（例：現状の構成を想定）
-
 ```
-
 kaggle-template/
-src/
-config.py
-config_io.py
-data.py
-features.py
-feature_store.py
-models.py
-split.py
-train.py
-inference.py
-experiment.py
-utils.py
-configs/
-default.json
-tests/
-test_pipeline.py
-scripts/
-package_dataset.py
-README.md
-
-````
+  kaggle_notebook_init.py
+  NOTEBOOK_TEMPLATE.md
+  src/
+    config.py
+    config_io.py
+    data.py
+    features.py
+    features/
+    feature_store.py
+    models.py
+    models/
+    split.py
+    train.py
+    inference.py
+    experiment.py
+    tasks/
+    utils.py
+  configs/
+    _base.json
+    default.json
+    comp_example/
+      train.json
+  data/
+    README.md
+  docs/
+    README.md
+  outputs/
+    README.md
+  tests/
+    test_pipeline.py
+    fixtures/
+  scripts/
+    package_dataset.py
+  README.md
+```
 
 - **コンペ固有の設定**（データパス、メトリック、CV、モデル）は `configs/*.json` に集約
 - `src/` には **汎用的な処理**のみを置く（Notebookにロジックを書かない）
@@ -52,7 +63,7 @@ README.md
 
 `run(cfg)` が司令塔としてパイプラインを実行します（概念図）：
 
-1. `config_io`：JSON → `Config`（または dict）にロード  
+1. `config_io`：JSON → `Config`（または dict）にロード
 2. `data`：学習/推論データの読み込み（`debug` で軽量化）
 3. `features`：特徴量生成（必要に応じてダミー化/結合）
 4. `split`：CV 分割（KFold / Stratified / Group など）
@@ -65,13 +76,16 @@ Notebook からは **`run(cfg)` 一発**で全処理が起動するため、変�
 
 ---
 
-## Quick Start (Kaggle Notebook / Internet ON)
+## 使い方（最短）
 
-### 1) Notebook Settings
-- **Internet**: ON  
-- **Accelerator**: None（CPU）または GPU（使えるなら）
+`NOTEBOOK_TEMPLATE.md` に最小セル例があります。まずはそれをコピーして開始してください。
 
-### 2) Clone & Run
+---
+
+## 使い方（GitHub から clone / Internet ON）
+
+1. Notebook の Internet を ON にする。
+2. 冒頭でリポジトリを clone し、`sys.path` に追加する。
 
 ```python
 # clone
@@ -88,28 +102,19 @@ from src.experiment import run
 cfg = load_config("/kaggle/working/kaggle-template/configs/default.json")
 result = run(cfg)
 result
-````
+```
 
-> 更新の反映：
-> GitHub に push → Notebook を再実行（cloneし直す）だけで反映されます。
+GitHub 上でテンプレートを更新すると、clone している Notebook 全てに自動で反映されます。
+
+`kaggle_notebook_init.py` を使う場合は、clone 後に `sys.path.append(...)` の上で import すると `REPO_DIR` が使えます。
 
 ---
 
-## Usage (Kaggle Dataset / Internet OFF)
+## 使い方（Dataset 経由 / Internet OFF）
 
-Internet OFF コンペでは、テンプレを zip にして Kaggle Dataset として添付します。
-
-### 1) Zip を作る（ローカル）
-
-```bash
-python scripts/package_dataset.py --output kaggle_template_lib.zip
-```
-
-### 2) Kaggle Dataset を作成
-
-* `kaggle_template_lib.zip` をアップロード
-
-### 3) Notebook で読み込んで実行
+1. ローカルで `python scripts/package_dataset.py --output kaggle_template_lib.zip` を実行し、`src/` と `configs/` をまとめた zip を作成。
+2. Kaggle の Dataset を新規作成し、`kaggle_template_lib.zip` をアップロード。
+3. Notebook でその Dataset を「Add data」し、working ディレクトリにコピーして import する。
 
 ```python
 from pathlib import Path
@@ -134,11 +139,21 @@ result = run(cfg)
 result
 ```
 
+Internet が OFF のコンペでも同じワークフローでテンプレートを利用できます。
+
+---
+
+## 一連の運用フロー
+
+1. 新規コンペ用の `configs/comp_xxx/` を作成し、`train.json` などを置く。
+2. Notebook から `load_config` → `run(cfg)` を呼び、OOF・提出を生成。
+3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` として保存。
+4. Kaggle の提出や外部分析は保存された成果物を参照するだけで良い。
+5. 改良（特徴量やモデル）を行ったら GitHub に commit → push、Notebook は再 clone or Dataset 更新のみ。
+
 ---
 
 ## Outputs (Experiment Artifacts)
-
-各実験の成果物は以下に保存されます：
 
 ```
 outputs/<experiment_name>/

@@ -1,0 +1,13 @@
+{
+  "id_col": "id",
+  "target_col": "target",
+  "task_type": "binary",
+  "metric": "roc_auc",
+  "cv_type": "stratified",
+  "n_splits": 5,
+  "seed": 42,
+  "model_name": "logistic_regression",
+  "model_params": {},
+  "output_dir": "outputs",
+  "experiment_name": "exp_baseline"
+}

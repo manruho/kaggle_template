@@ -6,12 +6,12 @@ import subprocess
 
 
 def setup_template_repo(repo_url: str, work_root: Path) -> Path:
-    repo_dir = work_root / "Project"
+    repo_dir = work_root / "kaggle-template"
 
     if not repo_dir.exists():
         subprocess.run(["git", "clone", repo_url, str(repo_dir)], check=True)
     else:
-        subprocess.run(["git", "-C", str(repo_dir), "pull"], check=False)  # Why not
+        subprocess.run(["git", "-C", str(repo_dir), "pull"], check=False)
 
     sys.path.append(str(repo_dir))
     return repo_dir

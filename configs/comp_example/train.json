@@ -1,0 +1,19 @@
+{
+  "train_path": "/kaggle/input/xxx/train.csv",
+  "test_path": "/kaggle/input/xxx/test.csv",
+  "sample_sub_path": "/kaggle/input/xxx/sample_submission.csv",
+  "id_col": "id",
+  "target_col": "target",
+  "task_type": "binary",
+  "metric": "roc_auc",
+  "cv_type": "stratified",
+  "n_splits": 5,
+  "seed": 42,
+  "model_name": "lightgbm",
+  "model_params": {
+    "learning_rate": 0.05,
+    "num_leaves": 64
+  },
+  "output_dir": "outputs",
+  "experiment_name": "comp_example_lgb"
+}
