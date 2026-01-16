@@ -14,6 +14,27 @@ Kaggle の実験を **「Notebookは薄く」**、**「ロジックは `src/` �
 
 ---
 
+## Quick Start (1 Cell)
+
+```python
+# clone
+!rm -rf /kaggle/working/kaggle-template
+!git clone https://github.com/manruho/kaggle_template /kaggle/working/kaggle-template
+
+# import
+import sys
+sys.path.insert(0, "/kaggle/working/kaggle-template")
+
+from src.config_io import load_config
+from src.experiment import run
+
+cfg = load_config("/kaggle/working/kaggle-template/configs/default.json")
+result = run(cfg)
+result
+```
+
+---
+
 ## Directory Structure
 
 ```
@@ -56,6 +77,16 @@ kaggle-template/
 
 - **コンペ固有の設定**（データパス、メトリック、CV、モデル）は `configs/*.json` に集約
 - `src/` には **汎用的な処理**のみを置く（Notebookにロジックを書かない）
+
+---
+
+## First Things to Change
+
+- `train_path`, `test_path`, `sample_sub_path`
+- `id_col`, `target_col`
+- `metric`, `cv_type`, `n_splits`, `seed`
+- `model_name`, `model_params`
+- `experiment_name`
 
 ---
 
@@ -159,6 +190,8 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
 outputs/<experiment_name>/
   submission.csv
   oof.csv
+  oof.parquet
+  pred_test.parquet
   cv_scores.json
   config_used.json
   meta.json
@@ -166,9 +199,11 @@ outputs/<experiment_name>/
 
 * `submission.csv`：提出用
 * `oof.csv`：OOF（アンサンブル/stacking用）
+* `oof.parquet`：`id`, `target`, `pred`, `fold`
+* `pred_test.parquet`：`id`, `pred`
 * `cv_scores.json`：fold score
 * `config_used.json`：実行時点の config（再現性）
-* `meta.json`：CVサマリや環境情報（任意：commit hash / versions）
+* `meta.json`：CVサマリや環境情報（必須：CV統計、seed、model、features_version、可能ならgit commit）
 
 > ルール：
 > **実験結果は `outputs/` を見れば全部わかる**状態を目指します。
