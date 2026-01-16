@@ -20,6 +20,7 @@ class TrainingResult:
     oof: np.ndarray
     predictions_test: np.ndarray
     scores: List[float]
+    folds: np.ndarray
 
 
 def train_cv(
@@ -32,6 +33,7 @@ def train_cv(
     y_series = pd.Series(y).reset_index(drop=True)
     splitter = build_splitter(config, y_series, groups)
     oof = np.zeros(len(X_train))
+    fold_ids = np.full(len(X_train), -1, dtype=int)
     test_pred_accumulator = None
     models: List[Any] = []
     scores: List[float] = []
@@ -48,6 +50,7 @@ def train_cv(
 
         pred_val = predict(model, X_val, config.task_type)
         oof[valid_idx] = _flatten_binary_predictions(pred_val)
+        fold_ids[valid_idx] = fold
 
         fold_score = _compute_metric(config.metric, y_val, pred_val, config.task_type)
         scores.append(fold_score)
@@ -60,7 +63,13 @@ def train_cv(
     if test_pred_accumulator is None:
         raise RuntimeError("CV splitter produced no folds")
     test_pred_avg = test_pred_accumulator / config.n_splits
-    return TrainingResult(models=models, oof=oof, predictions_test=test_pred_avg, scores=scores)
+    return TrainingResult(
+        models=models,
+        oof=oof,
+        predictions_test=test_pred_avg,
+        scores=scores,
+        folds=fold_ids,
+    )
 
 
 def _flatten_binary_predictions(predictions: np.ndarray) -> np.ndarray:

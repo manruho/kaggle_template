@@ -111,6 +111,8 @@ def _write_artifacts(
 
     oof_df = pd.DataFrame({config.id_col: train_df[config.id_col], f"oof_{config.target_col}": result.oof})
     oof_df.to_csv(paths.oof_path, index=False)
+    _write_oof_parquet(paths.oof_parquet_path, train_df, result, config)
+    _write_pred_test_parquet(paths.pred_test_parquet_path, submission, result, config)
 
     Path(paths.metrics_path).write_text(json.dumps({"scores": result.scores}, indent=2), encoding="utf-8")
     save_config(config, paths.config_copy_path)
@@ -125,6 +127,48 @@ def _write_artifacts(
 
     if config.dataset_name:
         cache_dataset(submission, Path(output_dir) / f"submission_{config.dataset_name}.csv")
+
+
+def _write_oof_parquet(
+    path: str,
+    train_df: pd.DataFrame,
+    result: TrainingResult,
+    config: Config,
+) -> None:
+    pred_df = _build_pred_frame(result.oof, prefix="pred")
+    oof_df = pd.concat(
+        [
+            train_df[[config.id_col, config.target_col]].reset_index(drop=True),
+            pred_df.reset_index(drop=True),
+            pd.DataFrame({"fold": result.folds}),
+        ],
+        axis=1,
+    )
+    oof_df.to_parquet(path, index=False)
+
+
+def _write_pred_test_parquet(
+    path: str,
+    submission: pd.DataFrame,
+    result: TrainingResult,
+    config: Config,
+) -> None:
+    pred_df = _build_pred_frame(result.predictions_test, prefix="pred")
+    pred_test_df = pd.concat(
+        [
+            submission[[config.id_col]].reset_index(drop=True),
+            pred_df.reset_index(drop=True),
+        ],
+        axis=1,
+    )
+    pred_test_df.to_parquet(path, index=False)
+
+
+def _build_pred_frame(predictions: np.ndarray, *, prefix: str) -> pd.DataFrame:
+    preds = np.asarray(predictions)
+    if preds.ndim == 1:
+        return pd.DataFrame({prefix: preds})
+    return pd.DataFrame({f"{prefix}_{idx}": preds[:, idx] for idx in range(preds.shape[1])})
 
 
 def _build_meta(
