@@ -135,7 +135,7 @@ result = run(cfg)
 result
 ```
 
-GitHub 上でテンプレートを更新すると、clone している Notebook 全てに自動で反映されます。
+GitHub 上でテンプレートを更新したら、Notebook を再実行（再 clone / pull）して反映します。
 
 `kaggle_notebook_init.py` を使う場合は、clone 後に `sys.path.append(...)` の上で import すると `REPO_DIR` が使えます。
 
