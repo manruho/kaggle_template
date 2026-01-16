@@ -1,16 +1,18 @@
 # Kaggle Notebook Template
 
 ```python
-!git clone https://github.com/<you>/kaggle-template.git /kaggle/working/kaggle-template
+# clone
+!rm -rf /kaggle/working/kaggle-template
+!git clone https://github.com/manruho/kaggle_template /kaggle/working/kaggle-template
 
+# import
 import sys
-sys.path.append("/kaggle/working/kaggle-template")
+sys.path.insert(0, "/kaggle/working/kaggle-template")
 
 from src.config_io import load_config
 from src.experiment import run
 
-cfg = load_config("/kaggle/working/kaggle-template/configs/comp_example/train.json")
-res = run(cfg)
-
-print(res.scores)
+cfg = load_config("/kaggle/working/kaggle-template/configs/default.json")
+result = run(cfg)
+result
 ```
