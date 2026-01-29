@@ -5,8 +5,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-pydantic = pytest.importorskip("pydantic")
-
 from src.utils.experiment_id import generate_experiment_name
 from src.utils.metadata import save_env_metadata, save_git_metadata
 from src.utils.submission_validator import validate_submission

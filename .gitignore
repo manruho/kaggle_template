@@ -3,3 +3,4 @@ __pycache__/
 outputs/
 kaggle_template_lib.zip
 .DS_Store
+*.egg-info/

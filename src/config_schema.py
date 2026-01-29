@@ -3,24 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
-try:
-    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-except Exception:  # pragma: no cover - optional dependency
-    BaseModel = object  # type: ignore
-    ConfigDict = dict  # type: ignore
-    Field = lambda **_: None  # type: ignore
-
-    def field_validator(*_args: object, **_kwargs: object):  # type: ignore
-        def decorator(func):
-            return func
-
-        return decorator
-
-    def model_validator(*_args: object, **_kwargs: object):  # type: ignore
-        def decorator(func):
-            return func
-
-        return decorator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ConfigSchema(BaseModel):
@@ -108,9 +91,3 @@ class ConfigSchema(BaseModel):
         if method in {"time", "timeseries", "time_series", "timeseriessplit"} and not self.cv_time_col:
             raise ValueError("cv_time_col is required for time CV")
         return self
-
-    @classmethod
-    def model_validate(cls, payload: dict[str, Any]) -> "ConfigSchema":  # type: ignore[override]
-        if cls is BaseModel:
-            raise ImportError("pydantic is required for config validation")
-        return super().model_validate(payload)  # type: ignore[misc]

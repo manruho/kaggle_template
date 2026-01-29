@@ -21,6 +21,9 @@ Kaggle の実験を **「Notebookは薄く」**、**「ロジックは `src/` �
 !rm -rf /kaggle/working/kaggle-template
 !git clone https://github.com/manruho/kaggle_template /kaggle/working/kaggle-template
 
+# install (recommended: enables ConfigSchema validation via pydantic)
+!pip -q install -e /kaggle/working/kaggle-template
+
 # import
 import sys
 sys.path.insert(0, "/kaggle/working/kaggle-template")

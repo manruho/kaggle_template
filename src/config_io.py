@@ -16,7 +16,13 @@ def load_config(path: str | Path) -> Config:
     payload = _load_payload(target)
     if isinstance(payload, dict):
         payload["_config_path"] = str(target)
-    validated = ConfigSchema.model_validate(payload)
+    try:
+        validated = ConfigSchema.model_validate(payload)
+    except ImportError as exc:
+        raise ImportError(
+            "Config validation requires pydantic. Install dependencies via `pip install -e .` (recommended) "
+            "or `pip install pydantic`."
+        ) from exc
     return Config.from_dict(validated.model_dump())
 
 
