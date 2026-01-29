@@ -1,13 +1,8 @@
 """Experiment orchestration entry points."""
 from __future__ import annotations
 
-import json
-import platform
-import subprocess
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from importlib import metadata
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
@@ -15,15 +10,24 @@ import numpy as np
 import pandas as pd
 
 from .config import Config
-from .config_io import save_config
 from .data import cache_dataset, load_datasets
 from .features import build_feature_frames
 from .feature_store import FeatureStore
 from .inference import predict_ensemble
 from .model_io import load_models, save_models
-from .submission import validate_submission
 from .train import TrainingResult, train_cv
 from .utils import ArtifactPaths, seed_everything
+from .utils.experiment_id import generate_experiment_name, is_convention_name
+from .utils.metadata import (
+    build_run_summary,
+    save_config_snapshot,
+    save_cv_scores,
+    save_env_metadata,
+    save_git_metadata,
+    save_run_summary,
+)
+from .utils.registry import append_experiment_record
+from .utils.submission_validator import validate_submission
 
 
 @dataclass
@@ -49,7 +53,7 @@ def run(config: Config) -> ExperimentResult:
     """High level pipeline: load data -> train -> save artifacts."""
 
     start_time = datetime.now(timezone.utc)
-    config.ensure_experiment_name()
+    _ensure_experiment_name(config)
     seed_everything(config.seed)
     train_df, test_df, sample_sub = load_datasets(config)
     config.with_train_columns(train_df.columns)
@@ -68,10 +72,6 @@ def run(config: Config) -> ExperimentResult:
         model_paths = save_models(training_result.models, config.resolve_output_dir(), config)
     submission = _build_submission(config, sample_sub, training_result.predictions_test)
 
-    validation_report = None
-    if config.validate_submission:
-        validation_report = validate_submission(submission, sample_sub, id_col=config.id_col, strict=True)
-
     end_time = datetime.now(timezone.utc)
     _write_artifacts(
         config,
@@ -82,7 +82,6 @@ def run(config: Config) -> ExperimentResult:
         training_result,
         sample_sub=sample_sub,
         feature_cache=feature_cache,
-        validation_report=validation_report,
         start_time=start_time,
         end_time=end_time,
         model_paths=model_paths,
@@ -92,7 +91,7 @@ def run(config: Config) -> ExperimentResult:
 
 def train_only(config: Config) -> TrainingResult:
     start_time = datetime.now(timezone.utc)
-    config.ensure_experiment_name()
+    _ensure_experiment_name(config)
     seed_everything(config.seed)
     train_df, test_df, _sample_sub = load_datasets(config)
     config.with_train_columns(train_df.columns)
@@ -125,7 +124,7 @@ def train_only(config: Config) -> TrainingResult:
 
 
 def infer_only(config: Config) -> np.ndarray:
-    config.ensure_experiment_name()
+    _ensure_experiment_name(config)
     seed_everything(config.seed)
     train_df, test_df, _sample_sub = load_datasets(config)
     config.with_train_columns(train_df.columns)
@@ -143,7 +142,7 @@ def infer_only(config: Config) -> np.ndarray:
 
 
 def make_submission(config: Config, *, predictions: np.ndarray | None = None) -> pd.DataFrame:
-    config.ensure_experiment_name()
+    _ensure_experiment_name(config)
     _train_df, _test_df, sample_sub = load_datasets(config)
     output_dir = config.resolve_output_dir()
     if predictions is None:
@@ -152,13 +151,16 @@ def make_submission(config: Config, *, predictions: np.ndarray | None = None) ->
             raise FileNotFoundError(f"predictions not found: {pred_path}")
         predictions = np.load(pred_path)
     submission = _build_submission(config, sample_sub, predictions)
-    validation_report = None
-    if config.validate_submission:
-        validation_report = validate_submission(submission, sample_sub, id_col=config.id_col, strict=True)
+    validate_submission(
+        submission,
+        sample_sub,
+        id_col=config.id_col,
+        target_cols=[col for col in sample_sub.columns if col != config.id_col],
+        task_type=config.task_type,
+    )
     _write_submission_artifacts(
         config,
         submission,
-        validation_report=validation_report,
     )
     return submission
 
@@ -216,7 +218,6 @@ def _write_artifacts(
     *,
     sample_sub: pd.DataFrame,
     feature_cache: Dict[str, Any] | None = None,
-    validation_report: Dict[str, Any] | None = None,
     start_time: datetime,
     end_time: datetime,
     model_paths: Sequence[str] | None = None,
@@ -224,40 +225,32 @@ def _write_artifacts(
     output_dir = config.resolve_output_dir()
     paths = ArtifactPaths.from_root(str(output_dir))
 
+    meta_dir = _prepare_meta_dir(output_dir)
+    save_config_snapshot(meta_dir, config.as_dict())
+    save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
+    save_env_metadata(
+        meta_dir,
+        package_names=["numpy", "pandas", "scikit-learn", "lightgbm", "xgboost", "catboost", "torch"],
+    )
+
+    _write_cv_scores(meta_dir, config, result)
+
+    validate_submission(
+        submission,
+        sample_sub,
+        id_col=config.id_col,
+        target_cols=[col for col in sample_sub.columns if col != config.id_col],
+        task_type=config.task_type,
+    )
+
+    Path(paths.submission_path).parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(paths.submission_path, index=False)
     _write_oof_paths(paths, train_df, result, config)
     _write_pred_test_paths(paths, test_df, result.predictions_test, id_col=config.id_col)
     np.save(paths.predictions_path, result.predictions_test)
     _write_folds(paths.folds_path, train_df[config.id_col], result.folds)
-    _write_metrics(paths.metrics_path, config, result)
-    save_config(config, paths.config_copy_path)
-    _write_meta(
-        paths.meta_path,
-        config,
-        train_df,
-        X_train,
-        submission,
-        result,
-        feature_cache=feature_cache,
-        start_time=start_time,
-        end_time=end_time,
-        model_paths=model_paths,
-    )
-    _write_env_files(paths)
-    if validation_report is not None:
-        Path(paths.submission_validation_path).write_text(
-            json.dumps(validation_report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    _write_run_summary(
-        paths.run_summary_path,
-        config,
-        result,
-        start_time=start_time,
-        end_time=end_time,
-        validation_report=validation_report,
-    )
-    _update_experiment_registry(config, result)
+    _write_run_summary_meta(meta_dir, config, result, start_time=start_time, end_time=end_time)
+    _append_registry(config, result)
 
     if config.dataset_name:
         cache_dataset(submission, Path(output_dir) / f"submission_{config.dataset_name}.csv")
@@ -278,34 +271,21 @@ def _write_training_artifacts(
     output_dir = config.resolve_output_dir()
     paths = ArtifactPaths.from_root(str(output_dir))
 
+    meta_dir = _prepare_meta_dir(output_dir)
+    save_config_snapshot(meta_dir, config.as_dict())
+    save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
+    save_env_metadata(
+        meta_dir,
+        package_names=["numpy", "pandas", "scikit-learn", "lightgbm", "xgboost", "catboost", "torch"],
+    )
+    _write_cv_scores(meta_dir, config, result)
+
     _write_oof_paths(paths, train_df, result, config)
     _write_pred_test_paths(paths, test_df, result.predictions_test, id_col=config.id_col)
     np.save(paths.predictions_path, result.predictions_test)
     _write_folds(paths.folds_path, train_df[config.id_col], result.folds)
-    _write_metrics(paths.metrics_path, config, result)
-    save_config(config, paths.config_copy_path)
-    _write_meta(
-        paths.meta_path,
-        config,
-        train_df,
-        X_train,
-        None,
-        result,
-        feature_cache=feature_cache,
-        start_time=start_time,
-        end_time=end_time,
-        model_paths=model_paths,
-    )
-    _write_env_files(paths)
-    _write_run_summary(
-        paths.run_summary_path,
-        config,
-        result,
-        start_time=start_time,
-        end_time=end_time,
-        validation_report=None,
-    )
-    _update_experiment_registry(config, result)
+    _write_run_summary_meta(meta_dir, config, result, start_time=start_time, end_time=end_time)
+    _append_registry(config, result)
 
 
 def _write_inference_artifacts(
@@ -319,27 +299,16 @@ def _write_inference_artifacts(
     paths = ArtifactPaths.from_root(str(output_dir))
     _write_pred_test_paths(paths, test_df, predictions, id_col=config.id_col)
     np.save(paths.predictions_path, predictions)
-    if feature_cache is not None:
-        Path(paths.meta_path).write_text(
-            json.dumps({"feature_cache": feature_cache}, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
 
 
 def _write_submission_artifacts(
     config: Config,
     submission: pd.DataFrame,
-    *,
-    validation_report: Dict[str, Any] | None = None,
 ) -> None:
     output_dir = config.resolve_output_dir()
     paths = ArtifactPaths.from_root(str(output_dir))
+    Path(paths.submission_path).parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(paths.submission_path, index=False)
-    if validation_report is not None:
-        Path(paths.submission_validation_path).write_text(
-            json.dumps(validation_report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
     if config.dataset_name:
         cache_dataset(submission, Path(output_dir) / f"submission_{config.dataset_name}.csv")
 
@@ -414,131 +383,10 @@ def _safe_to_parquet(df: pd.DataFrame, path: str) -> None:
         df.to_pickle(fallback)
 
 
-def _write_meta(
-    path: str,
-    config: Config,
-    train_df: pd.DataFrame,
-    X_train: pd.DataFrame,
-    submission: pd.DataFrame | None,
-    result: TrainingResult,
-    *,
-    feature_cache: Dict[str, Any] | None = None,
-    start_time: datetime,
-    end_time: datetime,
-    model_paths: Sequence[str] | None = None,
-) -> None:
-    scores = [float(score) for score in result.scores]
-    meta: Dict[str, Any] = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "run_started_at": start_time.isoformat(),
-        "run_finished_at": end_time.isoformat(),
-        "run_duration_seconds": (end_time - start_time).total_seconds(),
-        "experiment_name": config.experiment_name,
-        "cv_mean": float(np.mean(scores)) if scores else None,
-        "cv_std": float(np.std(scores)) if scores else None,
-        "fold_scores": scores,
-        "oof_score": result.oof_score,
-        "seed": config.seed,
-        "cv_method": config.get_cv_method(),
-        "n_splits": config.n_splits,
-        "cv_group_col": config.cv_group_col,
-        "cv_time_col": config.cv_time_col,
-        "task_type": config.task_type,
-        "metric": config.metric,
-        "model_name": config.model_name,
-        "model_params": config.model_params,
-        "feature_version": config.get_feature_version(),
-        "n_train": int(len(train_df)),
-        "n_test": int(len(submission)) if submission is not None else None,
-        "raw_feature_count": int(len(config.feature_columns)),
-        "encoded_feature_count": int(X_train.shape[1]),
-        "git_commit": _get_git_commit(),
-        "python": platform.python_version(),
-        "packages": _get_package_versions(
-            (
-                "numpy",
-                "pandas",
-                "scikit-learn",
-                "lightgbm",
-                "xgboost",
-                "catboost",
-                "torch",
-                "tensorflow",
-            )
-        ),
-        "tags": list(config.experiment_tags) if config.experiment_tags else [],
-        "note": config.experiment_note,
-        "parent": config.experiment_parent,
-        "model_paths": list(model_paths) if model_paths else [],
-    }
-    if feature_cache is not None:
-        meta["feature_cache"] = feature_cache
-    Path(path).write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _write_metrics(path: str, config: Config, result: TrainingResult) -> None:
-    Path(path).write_text(
-        json.dumps(
-            {
-                "metric": config.metric,
-                "fold_scores": result.scores,
-                "mean": float(np.mean(result.scores)) if result.scores else None,
-                "std": float(np.std(result.scores)) if result.scores else None,
-                "oof_score": result.oof_score,
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-
-def _get_git_commit() -> str | None:
-    repo_root = _find_git_root(Path(__file__).resolve())
-    if repo_root is None:
-        return None
-    try:
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root).decode("utf-8").strip()
-    except Exception:
-        return None
-    return commit or None
-
-
-def _find_git_root(start: Path) -> Path | None:
-    for path in (start, *start.parents):
-        if (path / ".git").exists():
-            return path
-    return None
-
-
-def _get_package_versions(package_names: Sequence[str]) -> Dict[str, str]:
-    versions: Dict[str, str] = {}
-    for name in package_names:
-        try:
-            versions[name] = metadata.version(name)
-        except metadata.PackageNotFoundError:
-            continue
-        except Exception:
-            continue
-    return versions
-
-
-def _write_env_files(paths: ArtifactPaths) -> None:
-    Path(paths.env_path).write_text(
-        f"python={platform.python_version()}\nplatform={platform.platform()}\n",
-        encoding="utf-8",
-    )
-    pip_freeze = _get_pip_freeze()
-    if pip_freeze is not None:
-        Path(paths.pip_freeze_path).write_text(pip_freeze, encoding="utf-8")
-
-
-def _get_pip_freeze() -> str | None:
-    try:
-        output = subprocess.check_output([sys.executable, "-m", "pip", "freeze"])
-    except Exception:
-        return None
-    return output.decode("utf-8")
+def _prepare_meta_dir(output_dir: Path) -> Path:
+    meta_dir = output_dir / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    return meta_dir
 
 
 def _write_folds(path: str, ids: pd.Series, folds: np.ndarray) -> None:
@@ -546,69 +394,52 @@ def _write_folds(path: str, ids: pd.Series, folds: np.ndarray) -> None:
     fold_df.to_csv(path, index=False)
 
 
-def _write_run_summary(
-    path: str,
+def _write_run_summary_meta(
+    meta_dir: Path,
     config: Config,
     result: TrainingResult,
     *,
     start_time: datetime,
     end_time: datetime,
-    validation_report: Dict[str, Any] | None,
 ) -> None:
-    summary = {
-        "start_time": start_time.isoformat(),
-        "end_time": end_time.isoformat(),
-        "duration_seconds": (end_time - start_time).total_seconds(),
-        "experiment_name": config.experiment_name,
-        "config_summary": _config_summary(config),
-        "fold_scores": result.scores,
-        "oof_score": result.oof_score,
-        "metric": config.metric,
-        "artifacts_dir": str(config.resolve_output_dir()),
-        "validation": validation_report,
-    }
-    Path(path).write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _config_summary(config: Config) -> Dict[str, Any]:
-    return {
-        "model_name": config.model_name,
-        "task_type": config.task_type,
-        "feature_version": config.get_feature_version(),
-        "cv_method": config.get_cv_method(),
-        "n_splits": config.n_splits,
-        "seed": config.seed,
-        "debug": config.debug,
-        "features": list(config.features) if config.features else None,
-        "drop_cols": list(config.drop_cols) if config.drop_cols else None,
-    }
-
-
-def _update_experiment_registry(config: Config, result: TrainingResult) -> None:
-    registry_path = Path(config.output_dir) / "experiments.csv"
-    row = pd.DataFrame(
-        [
-            {
-                "experiment_name": config.experiment_name,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "model_name": config.model_name,
-                "feature_version": config.get_feature_version(),
-                "cv_method": config.get_cv_method(),
-                "n_splits": config.n_splits,
-                "seed": config.seed,
-                "metric": config.metric,
-                "cv_mean": float(np.mean(result.scores)) if result.scores else None,
-                "cv_std": float(np.std(result.scores)) if result.scores else None,
-                "oof_score": result.oof_score,
-                "tags": ",".join(config.experiment_tags or []),
-                "note": config.experiment_note,
-                "parent": config.experiment_parent,
-            }
-        ]
+    summary = build_run_summary(
+        experiment_name=config.experiment_name or "unknown",
+        metric=config.metric,
+        scores=result.scores,
+        model_name=config.model_name,
+        seed=config.seed,
+        start_time=start_time,
+        end_time=end_time,
     )
-    if registry_path.exists():
-        existing = pd.read_csv(registry_path)
-        registry = pd.concat([existing, row], ignore_index=True)
-    else:
-        registry = row
-    registry.to_csv(registry_path, index=False)
+    save_run_summary(meta_dir, summary)
+
+
+def _write_cv_scores(meta_dir: Path, config: Config, result: TrainingResult) -> None:
+    save_cv_scores(meta_dir, scores=result.scores, metric=config.metric)
+
+
+def _append_registry(config: Config, result: TrainingResult) -> None:
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "experiment_name": config.experiment_name,
+        "main_cv_score": float(sum(result.scores) / len(result.scores)) if result.scores else None,
+        "cv_std": float(np.std(result.scores)) if result.scores else None,
+        "metric": config.metric,
+    }
+    append_experiment_record(Path(config.output_dir) / "experiments.jsonl", record)
+
+
+def _ensure_experiment_name(config: Config) -> None:
+    name = config.experiment_name
+    if name and str(name).strip().lower() != "auto":
+        if not is_convention_name(name):
+            print(f"[warn] experiment_name looks non-standard: {name}")
+        return
+    config.experiment_name = generate_experiment_name(config.as_dict())
+
+
+def _find_repo_root(start: Path) -> Path:
+    for path in (start, *start.parents):
+        if (path / ".git").exists():
+            return path
+    return start

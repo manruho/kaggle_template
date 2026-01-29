@@ -1,15 +1,16 @@
-"""Utility functions."""
+"""ユーティリティ関数."""
 from __future__ import annotations
 
 import os
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable
+from typing import Any, Dict
 
 import numpy as np
 
 
 def seed_everything(seed: int) -> None:
+    """乱数シードを固定する."""
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -46,7 +47,7 @@ class ArtifactPaths:
     def from_root(cls, root: str) -> "ArtifactPaths":
         return cls(
             output_dir=root,
-            submission_path=os.path.join(root, "submission.csv"),
+            submission_path=os.path.join(root, "submission", "submission.csv"),
             oof_path=os.path.join(root, "oof.csv"),
             oof_parquet_path=os.path.join(root, "oof.parquet"),
             pred_test_parquet_path=os.path.join(root, "pred_test.parquet"),
