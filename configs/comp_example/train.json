@@ -7,6 +7,7 @@
   "task_type": "binary",
   "metric": "roc_auc",
   "cv_type": "stratified",
+  "cv_method": "stratified",
   "n_splits": 5,
   "seed": 42,
   "model_name": "lightgbm",
@@ -15,5 +16,12 @@
     "num_leaves": 64
   },
   "output_dir": "outputs",
-  "experiment_name": "comp_example_lgb"
+  "experiment_name": "auto",
+  "experiment_tags": [
+    "comp_example"
+  ],
+  "feature_version": "v1",
+  "use_feature_cache": true,
+  "feature_cache_format": "auto",
+  "validate_submission": true
 }

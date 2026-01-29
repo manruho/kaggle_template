@@ -71,7 +71,7 @@ class FeatureStore:
 
         payload: Dict[str, Any] = {
             "feature_store_version": FEATURE_STORE_VERSION,
-            "features_version": config.get("features_version", "default"),
+            "features_version": config.get_feature_version(),
             "id_col": config.id_col,
             "target_col": config.target_col,
             "features": list(config.features) if config.features else None,
@@ -87,7 +87,7 @@ class FeatureStore:
             "python": platform.python_version(),
             "pandas": pd.__version__,
         }
-        extra_params = config.get("feature_cache_params")
+        extra_params = config.feature_cache_params or config.get("feature_cache_params")
         if isinstance(extra_params, Mapping):
             payload["feature_cache_params"] = dict(extra_params)
 
@@ -133,7 +133,7 @@ class FeatureStore:
             "n_train": int(len(X_train)),
             "n_test": int(len(X_test)),
             "n_features": int(X_train.shape[1]),
-            "features_version": config.get("features_version", "default"),
+            "features_version": config.get_feature_version(),
             "format": None,
         }
 

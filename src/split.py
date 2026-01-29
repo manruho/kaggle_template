@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator, Sequence, Tuple
 
 import numpy as np
-from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold
+from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold, TimeSeriesSplit
 
 from .config import Config
 
@@ -12,17 +12,37 @@ from .config import Config
 FoldIterator = Iterator[Tuple[np.ndarray, np.ndarray]]
 
 
-def build_splitter(config: Config, y: Sequence, groups: Sequence | None = None) -> FoldIterator:
+def build_splitter(
+    config: Config,
+    y: Sequence,
+    groups: Sequence | None = None,
+    time_values: Sequence | None = None,
+) -> FoldIterator:
     """Return generator yielding train/valid indices."""
 
-    if config.cv_type == "stratified" and config.task_type in {"binary", "multiclass"}:
+    method = config.get_cv_method()
+
+    if method in {"stratified", "stratifiedkfold", "strat"} and config.task_type in {"binary", "multiclass"}:
         splitter = StratifiedKFold(n_splits=config.n_splits, shuffle=True, random_state=config.seed)
         return splitter.split(np.zeros(len(y)), y)
-    if config.cv_type == "group":
-        group_col = groups
-        if group_col is None:
+    if method in {"group", "groupkfold"}:
+        if groups is None:
             raise ValueError("Group CV requested but no groups were provided")
         splitter = GroupKFold(n_splits=config.n_splits)
-        return splitter.split(np.zeros(len(y)), y, group_col)
+        return splitter.split(np.zeros(len(y)), y, groups)
+    if method in {"time", "timeseries", "time_series", "timeseriessplit"}:
+        if time_values is None:
+            raise ValueError("TimeSeries CV requested but no time values were provided")
+        params = dict(config.cv_params or {})
+        splitter = TimeSeriesSplit(n_splits=config.n_splits, **params)
+        order = np.argsort(np.asarray(time_values))
+        return _time_series_split(splitter, order)
     splitter = KFold(n_splits=config.n_splits, shuffle=True, random_state=config.seed)
     return splitter.split(np.zeros(len(y)))
+
+
+def _time_series_split(splitter: TimeSeriesSplit, order: np.ndarray) -> FoldIterator:
+    for train_pos, valid_pos in splitter.split(order):
+        train_idx = order[train_pos]
+        valid_idx = order[valid_pos]
+        yield train_idx, valid_idx

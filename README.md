@@ -84,9 +84,10 @@ kaggle-template/
 
 - `train_path`, `test_path`, `sample_sub_path`
 - `id_col`, `target_col`
-- `metric`, `cv_type`, `n_splits`, `seed`
+- `metric`, `cv_method`, `cv_type`, `n_splits`, `seed`
 - `model_name`, `model_params`
-- `experiment_name`
+- `experiment_name`（`auto` 推奨）
+- `feature_version`, `use_feature_cache`
 
 ---
 
@@ -94,7 +95,7 @@ kaggle-template/
 
 `run(cfg)` が司令塔としてパイプラインを実行します（概念図）：
 
-1. `config_io`：JSON → `Config`（または dict）にロード
+1. `config_io`：JSON / YAML → `Config`（または dict）にロード
 2. `data`：学習/推論データの読み込み（`debug` で軽量化）
 3. `features`：特徴量生成（必要に応じてダミー化/結合）
 4. `split`：CV 分割（KFold / Stratified / Group など）
@@ -110,6 +111,16 @@ Notebook からは **`run(cfg)` 一発**で全処理が起動するため、変�
 ## 使い方（最短）
 
 `NOTEBOOK_TEMPLATE.md` に最小セル例があります。まずはそれをコピーして開始してください。
+
+---
+
+## 実行モード（分離）
+
+- `scripts/train.py --config <path>`：学習のみ（モデル保存 + OOF）
+- `scripts/infer.py --config <path>`：推論のみ（保存済みモデルを使用）
+- `scripts/make_submission.py --config <path>`：提出ファイル生成 + 検証
+
+Notebook からも `train_only / infer_only / make_submission` を呼び出せます。
 
 ---
 
@@ -178,7 +189,7 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
 
 1. 新規コンペ用の `configs/comp_xxx/` を作成し、`train.json` などを置く。
 2. Notebook から `load_config` → `run(cfg)` を呼び、OOF・提出を生成。
-3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` として保存。
+3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` ほかとして保存。
 4. Kaggle の提出や外部分析は保存された成果物を参照するだけで良い。
 5. 改良（特徴量やモデル）を行ったら GitHub に commit → push、Notebook は再 clone or Dataset 更新のみ。
 
@@ -192,9 +203,19 @@ outputs/<experiment_name>/
   oof.csv
   oof.parquet
   pred_test.parquet
+  pred_test.npy
   cv_scores.json
   config_used.json
+  run_summary.json
+  env.txt
+  pip_freeze.txt
+  folds.csv
+  submission_validation.json
+  models/
   meta.json
+
+outputs/
+  experiments.csv
 ```
 
 * `submission.csv`：提出用

@@ -7,6 +7,7 @@
   "task_type": "binary",
   "metric": "roc_auc",
   "cv_type": "stratified",
+  "cv_method": "stratified",
   "n_splits": 5,
   "seed": 42,
   "debug": false,
@@ -14,6 +15,13 @@
   "model_params": {
     "max_iter": 500
   },
-  "output_dir": "outputs/default",
-  "experiment_name": "baseline"
+  "output_dir": "outputs",
+  "experiment_name": "auto",
+  "experiment_tags": [
+    "baseline"
+  ],
+  "feature_version": "v1",
+  "use_feature_cache": true,
+  "feature_cache_format": "auto",
+  "validate_submission": true
 }

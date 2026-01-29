@@ -1,7 +1,7 @@
 """Inference helpers."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
@@ -20,3 +20,11 @@ def predict(model: Any, X: pd.DataFrame, task_type: str) -> np.ndarray:
         return np.asarray(preds)
     preds = model.predict(X)
     return np.asarray(preds)
+
+
+def predict_ensemble(models: Iterable[Any], X: pd.DataFrame, task_type: str) -> np.ndarray:
+    predictions = [predict(model, X, task_type) for model in models]
+    if not predictions:
+        raise ValueError("No models provided for inference")
+    stacked = np.asarray(predictions)
+    return stacked.mean(axis=0)

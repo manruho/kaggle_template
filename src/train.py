@@ -13,7 +13,6 @@ from .inference import predict
 from .models import create_model
 from .split import build_splitter
 
-
 @dataclass
 class TrainingResult:
     models: List[Any]
@@ -21,6 +20,7 @@ class TrainingResult:
     predictions_test: np.ndarray
     scores: List[float]
     folds: np.ndarray
+    oof_score: float | None
 
 
 def train_cv(
@@ -29,9 +29,10 @@ def train_cv(
     y: Sequence,
     X_test: pd.DataFrame,
     groups: Sequence | None = None,
+    time_values: Sequence | None = None,
 ) -> TrainingResult:
     y_series = pd.Series(y).reset_index(drop=True)
-    splitter = build_splitter(config, y_series, groups)
+    splitter = build_splitter(config, y_series, groups, time_values)
     oof = np.zeros(len(X_train))
     fold_ids = np.full(len(X_train), -1, dtype=int)
     test_pred_accumulator = None
@@ -63,12 +64,17 @@ def train_cv(
     if test_pred_accumulator is None:
         raise RuntimeError("CV splitter produced no folds")
     test_pred_avg = test_pred_accumulator / config.n_splits
+    try:
+        oof_score = _compute_metric(config.metric, y_series, oof, config.task_type)
+    except Exception:
+        oof_score = None
     return TrainingResult(
         models=models,
         oof=oof,
         predictions_test=test_pred_avg,
         scores=scores,
         folds=fold_ids,
+        oof_score=oof_score,
     )
 
 

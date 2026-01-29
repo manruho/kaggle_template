@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 lightgbm = ["lightgbm>=4.0"]
 xgboost = ["xgboost>=1.7"]
+config = ["pyyaml>=6.0"]
 test = [
   "pytest>=7.0",
   "scikit-learn>=1.3"

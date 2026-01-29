@@ -51,7 +51,9 @@ def test_run_pipeline(tmp_path: Path) -> None:
         model_params={"max_iter": 200},
         output_dir=str(tmp_path / "outputs"),
         experiment_name="test_run",
-        extras={"use_feature_cache": True, "features_version": "test_v1"},
+        use_feature_cache=True,
+        feature_version="test_v1",
+        validate_submission=True,
     )
 
     result = run(config)
@@ -63,9 +65,17 @@ def test_run_pipeline(tmp_path: Path) -> None:
     artifact_dir = Path(config.output_dir) / str(config.experiment_name)
     assert (artifact_dir / "submission.csv").exists()
     assert (artifact_dir / "oof.csv").exists()
+    assert (artifact_dir / "oof.parquet").exists() or (artifact_dir / "oof.pkl").exists()
+    assert (artifact_dir / "pred_test.parquet").exists() or (artifact_dir / "pred_test.pkl").exists()
     assert (artifact_dir / "cv_scores.json").exists()
     assert (artifact_dir / "config_used.json").exists()
     assert (artifact_dir / "meta.json").exists()
+    assert (artifact_dir / "run_summary.json").exists()
+    assert (artifact_dir / "env.txt").exists()
+    assert (artifact_dir / "folds.csv").exists()
+    assert (artifact_dir / "submission_validation.json").exists()
+    assert (artifact_dir / "pred_test.npy").exists()
+    assert (artifact_dir / "models").exists()
 
     meta_first = json.loads((artifact_dir / "meta.json").read_text(encoding="utf-8"))
     assert meta_first["feature_cache"]["enabled"] is True
@@ -78,3 +88,6 @@ def test_run_pipeline(tmp_path: Path) -> None:
 
     cache_root = Path(meta_second["feature_cache"]["cache_dir"]) / meta_second["feature_cache"]["cache_key"]
     assert (cache_root / "meta.json").exists()
+
+    registry_path = Path(config.output_dir) / "experiments.csv"
+    assert registry_path.exists()

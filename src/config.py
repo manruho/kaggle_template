@@ -18,6 +18,10 @@ class Config:
     task_type: str = "binary"
     metric: str = "roc_auc"
     cv_type: str = "stratified"
+    cv_method: Optional[str] = None
+    cv_group_col: Optional[str] = None
+    cv_time_col: Optional[str] = None
+    cv_params: Dict[str, Any] = field(default_factory=dict)
     n_splits: int = 5
     seed: int = 42
     debug: bool = False
@@ -28,7 +32,20 @@ class Config:
     model_params: Dict[str, Any] = field(default_factory=dict)
     output_dir: str = "outputs"
     experiment_name: Optional[str] = None
+    experiment_auto_name: bool = True
+    experiment_prefix: Optional[str] = None
+    experiment_tags: Optional[Sequence[str]] = None
+    experiment_note: Optional[str] = None
+    experiment_parent: Optional[str] = None
     dataset_name: Optional[str] = None
+    feature_version: Optional[str] = None
+    use_feature_cache: bool = False
+    feature_cache_dir: Optional[str] = None
+    feature_cache_format: str = "auto"
+    feature_cache_force_recompute: bool = False
+    feature_cache_params: Dict[str, Any] = field(default_factory=dict)
+    save_models: bool = True
+    validate_submission: bool = True
     extras: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -77,6 +94,36 @@ class Config:
             return getattr(self, key)
         return self.extras.get(key, default)
 
+    def ensure_experiment_name(self) -> "Config":
+        if self.experiment_name and str(self.experiment_name).lower() != "auto":
+            return self
+        if not self.experiment_auto_name:
+            return self
+        self.experiment_name = self.build_experiment_name()
+        return self
+
+    def build_experiment_name(self) -> str:
+        model = _normalize_token(self.model_name)
+        feature_version = self.get_feature_version()
+        cv_method = self.get_cv_method()
+        cv_tag = _cv_tag(cv_method, self.n_splits)
+        seed_tag = f"seed{self.seed}"
+
+        parts = [model, f"fe{feature_version}", cv_tag, seed_tag]
+        if self.experiment_prefix:
+            parts.insert(0, _normalize_token(self.experiment_prefix))
+        return "__".join(parts)
+
+    def get_cv_method(self) -> str:
+        method = self.cv_method or self.cv_type or "kfold"
+        return str(method).lower()
+
+    def get_feature_version(self) -> str:
+        if self.feature_version:
+            return _normalize_token(self.feature_version)
+        fallback = self.get("features_version", "default")
+        return _normalize_token(str(fallback))
+
     @property
     def feature_columns(self) -> Sequence[str]:
         """Columns used for modeling once ``train`` and ``test`` are loaded."""
@@ -96,3 +143,24 @@ class Config:
     def with_train_columns(self, columns: Sequence[str]) -> "Config":
         self._cached_train_columns = list(columns)
         return self
+
+
+def _normalize_token(value: str) -> str:
+    cleaned = str(value).strip().lower()
+    if not cleaned:
+        return "na"
+    cleaned = cleaned.replace(" ", "-")
+    return "".join(ch for ch in cleaned if ch.isalnum() or ch in {"-", "_", "."})
+
+
+def _cv_tag(method: str, n_splits: int) -> str:
+    method = method.lower()
+    if method in {"kfold", "cv"}:
+        return f"cv{n_splits}"
+    if method in {"stratified", "stratifiedkfold", "strat"}:
+        return f"stratcv{n_splits}"
+    if method in {"group", "groupkfold"}:
+        return f"groupcv{n_splits}"
+    if method in {"time", "timeseries", "time_series", "timeseriessplit"}:
+        return f"timecv{n_splits}"
+    return f"{_normalize_token(method)}cv{n_splits}"
