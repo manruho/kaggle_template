@@ -3,21 +3,30 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, List
+from typing import Any, Iterable, List, Sequence
 
 import joblib
 
 from .config import Config
 
 
-def save_models(models: Iterable[Any], output_dir: str | Path, config: Config) -> List[str]:
+def save_models(
+    models: Sequence[Any],
+    output_dir: str | Path,
+    config: Config,
+    *,
+    policy: str,
+    scores: Sequence[float] | None = None,
+) -> List[str]:
+    """モデルを保存する."""
     root = Path(output_dir) / "models"
     root.mkdir(parents=True, exist_ok=True)
 
+    indices = _select_indices(models, policy=policy, scores=scores)
     paths: List[str] = []
-    for idx, model in enumerate(models):
+    for idx in indices:
         path = root / f"model_fold_{idx}.joblib"
-        joblib.dump(model, path)
+        joblib.dump(models[idx], path)
         paths.append(str(path))
 
     meta = {
@@ -25,12 +34,11 @@ def save_models(models: Iterable[Any], output_dir: str | Path, config: Config) -
         "model_name": config.model_name,
         "model_params": config.model_params,
         "n_models": len(paths),
+        "policy": policy,
+        "indices": list(indices),
         "paths": paths,
     }
-    (root / "meta.json").write_text(
-        json_dumps(meta),
-        encoding="utf-8",
-    )
+    (root / "meta.json").write_text(json_dumps(meta), encoding="utf-8")
     return paths
 
 
@@ -48,3 +56,21 @@ def json_dumps(payload: Any) -> str:
     import json
 
     return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def _select_indices(
+    models: Sequence[Any],
+    *,
+    policy: str,
+    scores: Sequence[float] | None,
+) -> List[int]:
+    if policy == "none":
+        return []
+    if policy == "all":
+        return list(range(len(models)))
+    if policy == "best":
+        if not scores:
+            raise ValueError("scores are required when save_policy='best'")
+        best_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
+        return [best_idx]
+    raise ValueError(f"unsupported save_policy: {policy}")

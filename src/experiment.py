@@ -68,8 +68,15 @@ def run(config: Config) -> ExperimentResult:
 
     training_result = train_cv(config, X_train, y, X_test, groups, time_values)
     model_paths: Sequence[str] | None = None
-    if config.save_models:
-        model_paths = save_models(training_result.models, config.resolve_output_dir(), config)
+    policy = _resolve_save_policy(config)
+    if policy != "none":
+        model_paths = save_models(
+            training_result.models,
+            config.resolve_output_dir(),
+            config,
+            policy=policy,
+            scores=training_result.scores,
+        )
     submission = _build_submission(config, sample_sub, training_result.predictions_test)
 
     end_time = datetime.now(timezone.utc)
@@ -105,8 +112,15 @@ def train_only(config: Config) -> TrainingResult:
     y = train_df[config.target_col]
     training_result = train_cv(config, X_train, y, X_test, groups, time_values)
     model_paths: Sequence[str] | None = None
-    if config.save_models:
-        model_paths = save_models(training_result.models, config.resolve_output_dir(), config)
+    policy = _resolve_save_policy(config)
+    if policy != "none":
+        model_paths = save_models(
+            training_result.models,
+            config.resolve_output_dir(),
+            config,
+            policy=policy,
+            scores=training_result.scores,
+        )
 
     end_time = datetime.now(timezone.utc)
     _write_training_artifacts(
@@ -195,16 +209,17 @@ def _build_features(
 def _build_submission(config: Config, sample_sub: pd.DataFrame, predictions: np.ndarray) -> pd.DataFrame:
     submission = sample_sub.copy()
     target_columns = [col for col in submission.columns if col != config.id_col]
+    preds = np.asarray(predictions)
 
-    if predictions.ndim == 1:
+    if preds.ndim == 1:
         if not target_columns:
             raise ValueError("Sample submission does not contain target columns")
-        submission[target_columns[0]] = predictions
+        submission[target_columns[0]] = preds
     else:
-        if len(target_columns) != predictions.shape[1]:
+        if len(target_columns) != preds.shape[1]:
             raise ValueError("Number of prediction columns does not match submission template")
         for idx, column in enumerate(target_columns):
-            submission[column] = predictions[:, idx]
+            submission[column] = preds[:, idx]
     return submission
 
 
@@ -227,10 +242,11 @@ def _write_artifacts(
 
     meta_dir = _prepare_meta_dir(output_dir)
     save_config_snapshot(meta_dir, config.as_dict())
-    save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
+    git_info = save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
     save_env_metadata(
         meta_dir,
-        package_names=["numpy", "pandas", "scikit-learn", "lightgbm", "xgboost", "catboost", "torch"],
+        package_names=_resolve_env_packages(config),
+        include_pip_freeze=config.include_pip_freeze,
     )
 
     _write_cv_scores(meta_dir, config, result)
@@ -250,7 +266,7 @@ def _write_artifacts(
     np.save(paths.predictions_path, result.predictions_test)
     _write_folds(paths.folds_path, train_df[config.id_col], result.folds)
     _write_run_summary_meta(meta_dir, config, result, start_time=start_time, end_time=end_time)
-    _append_registry(config, result)
+    _append_registry(config, result, git_info=git_info)
 
     if config.dataset_name:
         cache_dataset(submission, Path(output_dir) / f"submission_{config.dataset_name}.csv")
@@ -273,10 +289,11 @@ def _write_training_artifacts(
 
     meta_dir = _prepare_meta_dir(output_dir)
     save_config_snapshot(meta_dir, config.as_dict())
-    save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
+    git_info = save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
     save_env_metadata(
         meta_dir,
-        package_names=["numpy", "pandas", "scikit-learn", "lightgbm", "xgboost", "catboost", "torch"],
+        package_names=_resolve_env_packages(config),
+        include_pip_freeze=config.include_pip_freeze,
     )
     _write_cv_scores(meta_dir, config, result)
 
@@ -285,7 +302,7 @@ def _write_training_artifacts(
     np.save(paths.predictions_path, result.predictions_test)
     _write_folds(paths.folds_path, train_df[config.id_col], result.folds)
     _write_run_summary_meta(meta_dir, config, result, start_time=start_time, end_time=end_time)
-    _append_registry(config, result)
+    _append_registry(config, result, git_info=git_info)
 
 
 def _write_inference_artifacts(
@@ -418,13 +435,23 @@ def _write_cv_scores(meta_dir: Path, config: Config, result: TrainingResult) -> 
     save_cv_scores(meta_dir, scores=result.scores, metric=config.metric)
 
 
-def _append_registry(config: Config, result: TrainingResult) -> None:
+def _append_registry(
+    config: Config,
+    result: TrainingResult,
+    *,
+    git_info: Dict[str, str],
+) -> None:
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "experiment_name": config.experiment_name,
         "main_cv_score": float(sum(result.scores) / len(result.scores)) if result.scores else None,
         "cv_std": float(np.std(result.scores)) if result.scores else None,
         "metric": config.metric,
+        "commit": git_info.get("commit"),
+        "branch": git_info.get("branch"),
+        "config_path": config.get("_config_path"),
+        "tags": list(config.experiment_tags) if config.experiment_tags else [],
+        "note": config.experiment_note,
     }
     append_experiment_record(Path(config.output_dir) / "experiments.jsonl", record)
 
@@ -435,7 +462,22 @@ def _ensure_experiment_name(config: Config) -> None:
         if not is_convention_name(name):
             print(f"[warn] experiment_name looks non-standard: {name}")
         return
+    if not config.experiment_auto_name:
+        return
     config.experiment_name = generate_experiment_name(config.as_dict())
+
+
+def _resolve_save_policy(config: Config) -> str:
+    policy = (config.save_policy or "none").lower()
+    if config.save_models and policy == "none":
+        policy = "all"
+    return policy
+
+
+def _resolve_env_packages(config: Config) -> list[str]:
+    if config.env_packages:
+        return list(config.env_packages)
+    return ["numpy", "pandas", "scikit-learn", "lightgbm", "xgboost", "catboost", "torch"]
 
 
 def _find_repo_root(start: Path) -> Path:

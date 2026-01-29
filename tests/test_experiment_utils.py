@@ -8,6 +8,8 @@ import pytest
 from src.utils.experiment_id import generate_experiment_name
 from src.utils.metadata import save_env_metadata, save_git_metadata
 from src.utils.submission_validator import validate_submission
+from src.model_io import save_models
+from src.config import Config
 
 
 def test_generate_experiment_name_contains_required_parts() -> None:
@@ -51,6 +53,18 @@ def test_validate_submission_failures() -> None:
 def test_metadata_saves_even_when_git_unavailable(tmp_path: Path) -> None:
     meta_dir = tmp_path / "meta"
     save_git_metadata(meta_dir, tmp_path / "nonexistent_repo")
-    save_env_metadata(meta_dir, package_names=["numpy"])
+    save_env_metadata(meta_dir, package_names=["numpy"], include_pip_freeze=False)
     assert (meta_dir / "git.txt").exists()
     assert (meta_dir / "env.txt").exists()
+
+
+def test_save_models_invalid_policy(tmp_path: Path) -> None:
+    config = Config(
+        train_path=str(tmp_path / "train.csv"),
+        test_path=str(tmp_path / "test.csv"),
+        sample_sub_path=str(tmp_path / "sample.csv"),
+        id_col="id",
+        target_col="target",
+    )
+    with pytest.raises(ValueError):
+        save_models([{"a": 1}], tmp_path, config, policy="bad", scores=[0.1])

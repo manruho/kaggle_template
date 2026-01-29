@@ -18,7 +18,7 @@ def save_config_snapshot(meta_dir: Path, cfg: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(dict(cfg), indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def save_git_metadata(meta_dir: Path, repo_root: Path) -> None:
+def save_git_metadata(meta_dir: Path, repo_root: Path) -> dict[str, str]:
     """Gitのメタ情報を保存する."""
     _ensure_dir(meta_dir)
     path = meta_dir / "git.txt"
@@ -27,12 +27,20 @@ def save_git_metadata(meta_dir: Path, repo_root: Path) -> None:
         branch = _git(repo_root, "rev-parse", "--abbrev-ref", "HEAD")
         dirty = "dirty" if _is_dirty(repo_root) else "clean"
         content = f"commit={commit}\nbranch={branch}\nstatus={dirty}\n"
+        info = {"commit": commit, "branch": branch, "status": dirty}
     except Exception:
         content = "unavailable\n"
+        info = {"commit": "unavailable", "branch": "unavailable", "status": "unavailable"}
     path.write_text(content, encoding="utf-8")
+    return info
 
 
-def save_env_metadata(meta_dir: Path, package_names: Sequence[str]) -> None:
+def save_env_metadata(
+    meta_dir: Path,
+    package_names: Sequence[str],
+    *,
+    include_pip_freeze: bool = False,
+) -> None:
     """実行環境のメタ情報を保存する."""
     _ensure_dir(meta_dir)
     path = meta_dir / "env.txt"
@@ -49,13 +57,14 @@ def save_env_metadata(meta_dir: Path, package_names: Sequence[str]) -> None:
                 continue
             except Exception:
                 continue
-        try:
-            freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"]).decode("utf-8")
-            lines.append("")
-            lines.append("[pip_freeze]")
-            lines.append(freeze.strip())
-        except Exception:
-            pass
+        if include_pip_freeze:
+            try:
+                freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"]).decode("utf-8")
+                lines.append("")
+                lines.append("[pip_freeze]")
+                lines.append(freeze.strip())
+            except Exception:
+                pass
         content = "\n".join(lines) + "\n"
     except Exception:
         content = "unavailable\n"

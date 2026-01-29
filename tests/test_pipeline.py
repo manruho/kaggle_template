@@ -54,6 +54,7 @@ def test_run_pipeline(tmp_path: Path) -> None:
         use_feature_cache=True,
         feature_version="test_v1",
         validate_submission=True,
+        save_policy="all",
     )
 
     result = run(config)

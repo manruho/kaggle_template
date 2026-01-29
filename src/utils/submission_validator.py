@@ -22,6 +22,8 @@ def validate_submission(
     _require_no_nan_inf(submission_df, target_cols)
     if task_type == "binary":
         _require_binary_range(submission_df, target_cols)
+    if task_type == "multilabel":
+        _require_binary_range(submission_df, target_cols)
     if task_type == "multiclass":
         _require_multiclass_prob(submission_df, target_cols)
 

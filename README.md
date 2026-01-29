@@ -84,10 +84,12 @@ kaggle-template/
 
 - `train_path`, `test_path`, `sample_sub_path`
 - `id_col`, `target_col`
-- `metric`, `cv_method`, `cv_type`, `n_splits`, `seed`
+- `metric`, `cv_method`（推奨）/`cv_type`（互換用）, `n_splits`, `seed`
 - `model_name`, `model_params`
 - `experiment_name`（`auto` 推奨）
 - `feature_version`, `use_feature_cache`
+- `save_policy`（`none` / `best` / `all`）
+- `env_packages`, `include_pip_freeze`
 
 ---
 
@@ -98,7 +100,7 @@ kaggle-template/
 1. `config_io`：JSON / YAML → `Config`（または dict）にロード
 2. `data`：学習/推論データの読み込み（`debug` で軽量化）
 3. `features`：特徴量生成（必要に応じてダミー化/結合）
-4. `split`：CV 分割（KFold / Stratified / Group など）
+4. `split`：CV 分割（kfold / stratified / group / time / repeated）
 5. `models`：`model_name` から学習器生成（factory）
 6. `train`：CV 学習 → OOF / fold score / test pred
 7. `inference`：提出用 DataFrame 作成
@@ -216,6 +218,18 @@ outputs/<experiment_name>/
 
 outputs/
   experiments.jsonl
+
+## 命名規約（auto）
+
+`<model>_<version>__fe<feature>__cvX__seedY`
+
+例: `lgb_v1__fe005__cv5__seed42`
+
+## CV 手法
+
+- `kfold`, `stratified`, `group`, `time`
+- `repeated_kfold`, `repeated_stratified_kfold`
+- `cv_params` で `n_repeats` などを渡せます
 ```
 
 * `submission.csv`：提出用

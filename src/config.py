@@ -33,10 +33,8 @@ class Config:
     output_dir: str = "outputs"
     experiment_name: Optional[str] = None
     experiment_auto_name: bool = True
-    experiment_prefix: Optional[str] = None
     experiment_tags: Optional[Sequence[str]] = None
     experiment_note: Optional[str] = None
-    experiment_parent: Optional[str] = None
     dataset_name: Optional[str] = None
     feature_version: Optional[str] = None
     use_feature_cache: bool = False
@@ -44,8 +42,11 @@ class Config:
     feature_cache_format: str = "auto"
     feature_cache_force_recompute: bool = False
     feature_cache_params: Dict[str, Any] = field(default_factory=dict)
-    save_models: bool = True
+    save_models: bool = False
+    save_policy: str = "none"
     validate_submission: bool = True
+    env_packages: Optional[Sequence[str]] = None
+    include_pip_freeze: bool = False
     extras: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -94,26 +95,6 @@ class Config:
             return getattr(self, key)
         return self.extras.get(key, default)
 
-    def ensure_experiment_name(self) -> "Config":
-        if self.experiment_name and str(self.experiment_name).lower() != "auto":
-            return self
-        if not self.experiment_auto_name:
-            return self
-        self.experiment_name = self.build_experiment_name()
-        return self
-
-    def build_experiment_name(self) -> str:
-        model = _normalize_token(self.model_name)
-        feature_version = self.get_feature_version()
-        cv_method = self.get_cv_method()
-        cv_tag = _cv_tag(cv_method, self.n_splits)
-        seed_tag = f"seed{self.seed}"
-
-        parts = [model, f"fe{feature_version}", cv_tag, seed_tag]
-        if self.experiment_prefix:
-            parts.insert(0, _normalize_token(self.experiment_prefix))
-        return "__".join(parts)
-
     def get_cv_method(self) -> str:
         method = self.cv_method or self.cv_type or "kfold"
         return str(method).lower()
@@ -151,16 +132,3 @@ def _normalize_token(value: str) -> str:
         return "na"
     cleaned = cleaned.replace(" ", "-")
     return "".join(ch for ch in cleaned if ch.isalnum() or ch in {"-", "_", "."})
-
-
-def _cv_tag(method: str, n_splits: int) -> str:
-    method = method.lower()
-    if method in {"kfold", "cv"}:
-        return f"cv{n_splits}"
-    if method in {"stratified", "stratifiedkfold", "strat"}:
-        return f"stratcv{n_splits}"
-    if method in {"group", "groupkfold"}:
-        return f"groupcv{n_splits}"
-    if method in {"time", "timeseries", "time_series", "timeseriessplit"}:
-        return f"timecv{n_splits}"
-    return f"{_normalize_token(method)}cv{n_splits}"

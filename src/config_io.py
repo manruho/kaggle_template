@@ -13,6 +13,8 @@ def load_config(path: str | Path) -> Config:
 
     target = Path(path)
     payload = _load_payload(target)
+    if isinstance(payload, dict):
+        payload["_config_path"] = str(target)
     return Config.from_dict(payload)
 
 

@@ -4,7 +4,14 @@ from __future__ import annotations
 from typing import Iterable, Iterator, Sequence, Tuple
 
 import numpy as np
-from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold, TimeSeriesSplit
+from sklearn.model_selection import (
+    GroupKFold,
+    KFold,
+    RepeatedKFold,
+    RepeatedStratifiedKFold,
+    StratifiedKFold,
+    TimeSeriesSplit,
+)
 
 from .config import Config
 
@@ -20,10 +27,25 @@ def build_splitter(
 ) -> FoldIterator:
     """Return generator yielding train/valid indices."""
 
+    custom_splitter = config.get("cv_splitter")
+    if custom_splitter is not None:
+        return custom_splitter.split(np.zeros(len(y)), y, groups)
+
     method = config.get_cv_method()
 
     if method in {"stratified", "stratifiedkfold", "strat"} and config.task_type in {"binary", "multiclass"}:
         splitter = StratifiedKFold(n_splits=config.n_splits, shuffle=True, random_state=config.seed)
+        return splitter.split(np.zeros(len(y)), y)
+    if method in {"repeated_stratified_kfold", "repeated_stratified"} and config.task_type in {
+        "binary",
+        "multiclass",
+    }:
+        params = dict(config.cv_params or {})
+        splitter = RepeatedStratifiedKFold(
+            n_splits=config.n_splits,
+            random_state=config.seed,
+            **params,
+        )
         return splitter.split(np.zeros(len(y)), y)
     if method in {"group", "groupkfold"}:
         if groups is None:
@@ -37,6 +59,14 @@ def build_splitter(
         splitter = TimeSeriesSplit(n_splits=config.n_splits, **params)
         order = np.argsort(np.asarray(time_values))
         return _time_series_split(splitter, order)
+    if method in {"repeated_kfold", "repeated"}:
+        params = dict(config.cv_params or {})
+        splitter = RepeatedKFold(
+            n_splits=config.n_splits,
+            random_state=config.seed,
+            **params,
+        )
+        return splitter.split(np.zeros(len(y)))
     splitter = KFold(n_splits=config.n_splits, shuffle=True, random_state=config.seed)
     return splitter.split(np.zeros(len(y)))
 

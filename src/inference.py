@@ -18,6 +18,9 @@ def predict(model: Any, X: pd.DataFrame, task_type: str) -> np.ndarray:
             return np.asarray(proba)
         preds = model.predict(X)
         return np.asarray(preds)
+    if task_type in {"multilabel", "multitarget", "multioutput_regression"}:
+        preds = model.predict(X)
+        return np.asarray(preds)
     preds = model.predict(X)
     return np.asarray(preds)
 
