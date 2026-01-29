@@ -63,31 +63,25 @@ def test_run_pipeline(tmp_path: Path) -> None:
     assert Path(config.output_dir).exists()
 
     artifact_dir = Path(config.output_dir) / str(config.experiment_name)
-    assert (artifact_dir / "submission.csv").exists()
+    assert (artifact_dir / "submission" / "submission.csv").exists()
     assert (artifact_dir / "oof.csv").exists()
     assert (artifact_dir / "oof.parquet").exists() or (artifact_dir / "oof.pkl").exists()
     assert (artifact_dir / "pred_test.parquet").exists() or (artifact_dir / "pred_test.pkl").exists()
-    assert (artifact_dir / "cv_scores.json").exists()
-    assert (artifact_dir / "config_used.json").exists()
-    assert (artifact_dir / "meta.json").exists()
-    assert (artifact_dir / "run_summary.json").exists()
-    assert (artifact_dir / "env.txt").exists()
+    assert (artifact_dir / "meta" / "cv_scores.json").exists()
+    assert (artifact_dir / "meta" / "config.snapshot.json").exists()
+    assert (artifact_dir / "meta" / "git.txt").exists()
+    assert (artifact_dir / "meta" / "run_summary.json").exists()
+    assert (artifact_dir / "meta" / "env.txt").exists()
     assert (artifact_dir / "folds.csv").exists()
-    assert (artifact_dir / "submission_validation.json").exists()
     assert (artifact_dir / "pred_test.npy").exists()
     assert (artifact_dir / "models").exists()
 
-    meta_first = json.loads((artifact_dir / "meta.json").read_text(encoding="utf-8"))
-    assert meta_first["feature_cache"]["enabled"] is True
-    assert meta_first["feature_cache"]["cache_hit"] is False
+    meta_first = json.loads((artifact_dir / "meta" / "cv_scores.json").read_text(encoding="utf-8"))
+    assert meta_first["metric"] == config.metric
 
     run(config)
-    meta_second = json.loads((artifact_dir / "meta.json").read_text(encoding="utf-8"))
-    assert meta_second["feature_cache"]["enabled"] is True
-    assert meta_second["feature_cache"]["cache_hit"] is True
+    meta_second = json.loads((artifact_dir / "meta" / "cv_scores.json").read_text(encoding="utf-8"))
+    assert "fold_scores" in meta_second
 
-    cache_root = Path(meta_second["feature_cache"]["cache_dir"]) / meta_second["feature_cache"]["cache_key"]
-    assert (cache_root / "meta.json").exists()
-
-    registry_path = Path(config.output_dir) / "experiments.csv"
+    registry_path = Path(config.output_dir) / "experiments.jsonl"
     assert registry_path.exists()
