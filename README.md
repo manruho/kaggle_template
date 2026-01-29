@@ -88,7 +88,8 @@ kaggle-template/
 - `model_name`, `model_params`
 - `experiment_name`（`auto` 推奨）
 - `feature_version`, `use_feature_cache`
-- `save_policy`（`none` / `best` / `all`）
+- `save_policy`（`none` / `best` / `all` / `keep_top_k`）
+- `save_top_k`, `models_dir`
 - `env_packages`, `include_pip_freeze`
 
 ---
@@ -221,7 +222,7 @@ outputs/
 
 ## 命名規約（auto）
 
-`<model>_<version>__fe<feature>__cvX__seedY`
+`<model>_<experiment_version>__fe<feature>__cvX__seedY`
 
 例: `lgb_v1__fe005__cv5__seed42`
 
@@ -237,8 +238,11 @@ outputs/
 * `oof.parquet`：`id`, `target`, `pred`, `fold`
 * `pred_test.parquet`：`id`, `pred`
 * `cv_scores.json`：fold score
-* `config_used.json`：実行時点の config（再現性）
-* `meta.json`：CVサマリや環境情報（必須：CV統計、seed、model、features_version、可能ならgit commit）
+* `meta/config.snapshot.json`：実行時点の config（再現性）
+* `meta/cv_scores.json`：CVサマリ（fold別スコア/平均/標準偏差）
+* `meta/run_summary.json`：実行サマリ（durationなど）
+* `meta/git.txt`：commit/branch/dirty
+* `meta/env.txt`：Python/主要ライブラリ（任意でpip freeze）
 
 > ルール：
 > **実験結果は `outputs/` を見れば全部わかる**状態を目指します。
@@ -405,7 +409,7 @@ python scripts/package_dataset.py --output kaggle_template_lib.zip
 * `metric` の種類追加、タスク別 pipeline
 * `src/features.py` / `src/models.py` の拡張
 * `src/tasks/` を作って tabular / nlp / image を切替
-* `meta.json` に commit hash / versions を保存して実験台帳化
+* `meta/git.txt` に commit hash / versions を保存して実験台帳化
 * OOF を使った重み最適化 blend（終盤の伸びに効く）
 
 ---

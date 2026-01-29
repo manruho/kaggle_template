@@ -25,5 +25,8 @@
   "feature_cache_format": "auto",
   "validate_submission": true,
   "save_policy": "none",
+  "save_top_k": 1,
+  "experiment_version": "v1",
+  "models_dir": null,
   "include_pip_freeze": false
 }

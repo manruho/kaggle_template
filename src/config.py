@@ -35,6 +35,7 @@ class Config:
     experiment_auto_name: bool = True
     experiment_tags: Optional[Sequence[str]] = None
     experiment_note: Optional[str] = None
+    experiment_version: str = "v1"
     dataset_name: Optional[str] = None
     feature_version: Optional[str] = None
     use_feature_cache: bool = False
@@ -44,6 +45,8 @@ class Config:
     feature_cache_params: Dict[str, Any] = field(default_factory=dict)
     save_models: bool = False
     save_policy: str = "none"
+    save_top_k: int = 1
+    models_dir: Optional[str] = None
     validate_submission: bool = True
     env_packages: Optional[Sequence[str]] = None
     include_pip_freeze: bool = False

@@ -17,12 +17,14 @@ def save_models(
     *,
     policy: str,
     scores: Sequence[float] | None = None,
+    top_k: int = 1,
+    models_dir: str | Path | None = None,
 ) -> List[str]:
     """モデルを保存する."""
-    root = Path(output_dir) / "models"
+    root = Path(models_dir) if models_dir else Path(output_dir) / "models"
     root.mkdir(parents=True, exist_ok=True)
 
-    indices = _select_indices(models, policy=policy, scores=scores)
+    indices = _select_indices(models, policy=policy, scores=scores, top_k=top_k)
     paths: List[str] = []
     for idx in indices:
         path = root / f"model_fold_{idx}.joblib"
@@ -37,13 +39,14 @@ def save_models(
         "policy": policy,
         "indices": list(indices),
         "paths": paths,
+        "models_dir": str(root),
     }
     (root / "meta.json").write_text(json_dumps(meta), encoding="utf-8")
     return paths
 
 
-def load_models(output_dir: str | Path) -> List[Any]:
-    root = Path(output_dir) / "models"
+def load_models(output_dir: str | Path, *, models_dir: str | Path | None = None) -> List[Any]:
+    root = Path(models_dir) if models_dir else Path(output_dir) / "models"
     if not root.exists():
         raise FileNotFoundError(f"Model directory not found: {root}")
     model_paths = sorted(root.glob("model_fold_*.joblib"))
@@ -63,6 +66,7 @@ def _select_indices(
     *,
     policy: str,
     scores: Sequence[float] | None,
+    top_k: int,
 ) -> List[int]:
     if policy == "none":
         return []
@@ -73,4 +77,11 @@ def _select_indices(
             raise ValueError("scores are required when save_policy='best'")
         best_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
         return [best_idx]
+    if policy in {"keep_top_k", "top_k"}:
+        if not scores:
+            raise ValueError("scores are required when save_policy='keep_top_k'")
+        if top_k <= 0:
+            raise ValueError("save_top_k must be positive")
+        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        return ranked[: min(top_k, len(ranked))]
     raise ValueError(f"unsupported save_policy: {policy}")

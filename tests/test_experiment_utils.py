@@ -68,3 +68,24 @@ def test_save_models_invalid_policy(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError):
         save_models([{"a": 1}], tmp_path, config, policy="bad", scores=[0.1])
+
+
+def test_save_models_keep_top_k(tmp_path: Path) -> None:
+    config = Config(
+        train_path=str(tmp_path / "train.csv"),
+        test_path=str(tmp_path / "test.csv"),
+        sample_sub_path=str(tmp_path / "sample.csv"),
+        id_col="id",
+        target_col="target",
+    )
+    models = [{"a": 1}, {"b": 2}, {"c": 3}]
+    scores = [0.1, 0.9, 0.5]
+    paths = save_models(
+        models,
+        tmp_path,
+        config,
+        policy="keep_top_k",
+        scores=scores,
+        top_k=2,
+    )
+    assert len(paths) == 2

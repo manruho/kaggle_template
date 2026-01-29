@@ -76,6 +76,8 @@ def run(config: Config) -> ExperimentResult:
             config,
             policy=policy,
             scores=training_result.scores,
+            top_k=config.save_top_k,
+            models_dir=config.models_dir,
         )
     submission = _build_submission(config, sample_sub, training_result.predictions_test)
 
@@ -120,6 +122,8 @@ def train_only(config: Config) -> TrainingResult:
             config,
             policy=policy,
             scores=training_result.scores,
+            top_k=config.save_top_k,
+            models_dir=config.models_dir,
         )
 
     end_time = datetime.now(timezone.utc)
@@ -144,7 +148,7 @@ def infer_only(config: Config) -> np.ndarray:
     config.with_train_columns(train_df.columns)
 
     _X_train, X_test, feature_cache = _build_features(config, train_df, test_df)
-    models = load_models(config.resolve_output_dir())
+    models = load_models(config.resolve_output_dir(), models_dir=config.models_dir)
     predictions = predict_ensemble(models, X_test, config.task_type)
     _write_inference_artifacts(
         config,
