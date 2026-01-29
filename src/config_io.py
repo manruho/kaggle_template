@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
+from .config_schema import ConfigSchema
 
 
 def load_config(path: str | Path) -> Config:
@@ -15,7 +16,8 @@ def load_config(path: str | Path) -> Config:
     payload = _load_payload(target)
     if isinstance(payload, dict):
         payload["_config_path"] = str(target)
-    return Config.from_dict(payload)
+    validated = ConfigSchema.model_validate(payload)
+    return Config.from_dict(validated.model_dump())
 
 
 def save_config(config: Config, path: str | Path) -> None:

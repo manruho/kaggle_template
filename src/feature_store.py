@@ -72,6 +72,7 @@ class FeatureStore:
         payload: Dict[str, Any] = {
             "feature_store_version": FEATURE_STORE_VERSION,
             "features_version": config.get_feature_version(),
+            "data_version": config.data_version,
             "id_col": config.id_col,
             "target_col": config.target_col,
             "features": list(config.features) if config.features else None,
@@ -86,6 +87,7 @@ class FeatureStore:
             "feature_code_hash": _safe_file_hash(Path(__file__).resolve().parent / "features.py"),
             "python": platform.python_version(),
             "pandas": pd.__version__,
+            "config_fingerprint": _config_fingerprint(config),
         }
         extra_params = config.feature_cache_params or config.get("feature_cache_params")
         if isinstance(extra_params, Mapping):
@@ -193,3 +195,17 @@ def _safe_file_hash(path: Path) -> str | None:
     except Exception:
         return None
     return hashlib.sha256(data).hexdigest()
+
+
+def _config_fingerprint(config: Config) -> str:
+    payload = {
+        "feature_version": config.get_feature_version(),
+        "data_version": config.data_version,
+        "features": list(config.features) if config.features else None,
+        "drop_cols": list(config.drop_cols) if config.drop_cols else None,
+        "task_type": config.task_type,
+        "model_name": config.model_name,
+        "model_params": config.model_params,
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]

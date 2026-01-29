@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Sequence
+import logging
+import sys
 
 import numpy as np
 import pandas as pd
@@ -20,10 +22,12 @@ from .utils import ArtifactPaths, seed_everything
 from .utils.experiment_id import generate_experiment_name, is_convention_name
 from .utils.metadata import (
     build_run_summary,
+    save_command,
     save_config_snapshot,
     save_cv_scores,
     save_env_metadata,
     save_git_metadata,
+    save_seed,
     save_run_summary,
 )
 from .utils.registry import append_experiment_record
@@ -54,6 +58,11 @@ def run(config: Config) -> ExperimentResult:
 
     start_time = datetime.now(timezone.utc)
     _ensure_experiment_name(config)
+    output_dir = config.resolve_output_dir()
+    logger = _setup_logger(output_dir)
+    logger.info("experiment_name=%s", config.experiment_name)
+    logger.info("config_path=%s", config.get("_config_path"))
+    logger.info("save_policy=%s", config.save_policy)
     seed_everything(config.seed)
     train_df, test_df, sample_sub = load_datasets(config)
     config.with_train_columns(train_df.columns)
@@ -245,6 +254,8 @@ def _write_artifacts(
     paths = ArtifactPaths.from_root(str(output_dir))
 
     meta_dir = _prepare_meta_dir(output_dir)
+    save_command(meta_dir, sys.argv)
+    save_seed(meta_dir, config.seed)
     save_config_snapshot(meta_dir, config.as_dict())
     git_info = save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
     save_env_metadata(
@@ -292,6 +303,8 @@ def _write_training_artifacts(
     paths = ArtifactPaths.from_root(str(output_dir))
 
     meta_dir = _prepare_meta_dir(output_dir)
+    save_command(meta_dir, sys.argv)
+    save_seed(meta_dir, config.seed)
     save_config_snapshot(meta_dir, config.as_dict())
     git_info = save_git_metadata(meta_dir, _find_repo_root(Path(__file__).resolve()))
     save_env_metadata(
@@ -469,6 +482,22 @@ def _ensure_experiment_name(config: Config) -> None:
     if not config.experiment_auto_name:
         return
     config.experiment_name = generate_experiment_name(config.as_dict())
+
+
+def _setup_logger(output_dir: Path) -> logging.Logger:
+    logger = logging.getLogger("kaggle_template")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    log_path = ArtifactPaths.from_root(str(output_dir)).log_path
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    return logger
 
 
 def _resolve_save_policy(config: Config) -> str:

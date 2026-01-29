@@ -5,10 +5,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+pydantic = pytest.importorskip("pydantic")
+
 from src.utils.experiment_id import generate_experiment_name
 from src.utils.metadata import save_env_metadata, save_git_metadata
 from src.utils.submission_validator import validate_submission
 from src.model_io import save_models
+from src.config_schema import ConfigSchema
 from src.config import Config
 
 
@@ -89,3 +92,17 @@ def test_save_models_keep_top_k(tmp_path: Path) -> None:
         top_k=2,
     )
     assert len(paths) == 2
+
+
+def test_config_validation_group_requires_column() -> None:
+    with pytest.raises(ValueError):
+        ConfigSchema.model_validate(
+            {
+                "train_path": "train.csv",
+                "test_path": "test.csv",
+                "sample_sub_path": "sample.csv",
+                "id_col": "id",
+                "target_col": "target",
+                "cv_method": "group",
+            }
+        )

@@ -228,9 +228,9 @@ outputs/
 
 ## CV 手法
 
-- `kfold`, `stratified`, `group`, `time`
+- `kfold`, `stratified`, `group`, `time`, `purged`
 - `repeated_kfold`, `repeated_stratified_kfold`
-- `cv_params` で `n_repeats` などを渡せます
+- `cv_params` で `n_repeats` / `purge_gap` などを渡せます
 ```
 
 * `submission.csv`：提出用
@@ -243,6 +243,8 @@ outputs/
 * `meta/run_summary.json`：実行サマリ（durationなど）
 * `meta/git.txt`：commit/branch/dirty
 * `meta/env.txt`：Python/主要ライブラリ（任意でpip freeze）
+* `meta/command.txt`：実行コマンド
+* `meta/seed.txt`：乱数シード
 
 > ルール：
 > **実験結果は `outputs/` を見れば全部わかる**状態を目指します。

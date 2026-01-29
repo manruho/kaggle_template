@@ -42,6 +42,7 @@ class ArtifactPaths:
     submission_validation_path: str
     models_dir: str
     predictions_path: str
+    log_path: str
 
     @classmethod
     def from_root(cls, root: str) -> "ArtifactPaths":
@@ -61,4 +62,5 @@ class ArtifactPaths:
             submission_validation_path=os.path.join(root, "submission_validation.json"),
             models_dir=os.path.join(root, "models"),
             predictions_path=os.path.join(root, "pred_test.npy"),
+            log_path=os.path.join(root, "log.txt"),
         )

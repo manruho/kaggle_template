@@ -38,6 +38,7 @@ class Config:
     experiment_version: str = "v1"
     dataset_name: Optional[str] = None
     feature_version: Optional[str] = None
+    data_version: Optional[str] = None
     use_feature_cache: bool = False
     feature_cache_dir: Optional[str] = None
     feature_cache_format: str = "auto"

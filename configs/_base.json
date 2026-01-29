@@ -19,5 +19,6 @@
   "save_top_k": 1,
   "experiment_version": "v1",
   "models_dir": null,
+  "data_version": null,
   "include_pip_freeze": false
 }

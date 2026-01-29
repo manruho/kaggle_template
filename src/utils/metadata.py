@@ -91,6 +91,20 @@ def save_run_summary(meta_dir: Path, summary: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(dict(summary), indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def save_command(meta_dir: Path, argv: Sequence[str]) -> None:
+    """実行コマンドを保存する."""
+    _ensure_dir(meta_dir)
+    path = meta_dir / "command.txt"
+    path.write_text(" ".join(argv) + "\n", encoding="utf-8")
+
+
+def save_seed(meta_dir: Path, seed: int) -> None:
+    """乱数シードを保存する."""
+    _ensure_dir(meta_dir)
+    path = meta_dir / "seed.txt"
+    path.write_text(str(seed) + "\n", encoding="utf-8")
+
+
 def build_run_summary(
     experiment_name: str,
     metric: str,
