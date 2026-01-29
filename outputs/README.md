@@ -9,21 +9,17 @@
 
 ## 生成物
 
-- `submission.csv`
+- `submission/submission.csv`
+- `meta/config.snapshot.json`
+- `meta/git.txt`
+- `meta/env.txt`
+- `meta/cv_scores.json`
+- `meta/run_summary.json`
 - `oof.csv`
 - `oof.parquet`
 - `pred_test.parquet`
 - `pred_test.npy`
-- `cv_scores.json`
-- `config_used.json`
-- `run_summary.json`
-- `env.txt`
-- `pip_freeze.txt`
 - `folds.csv`
-- `submission_validation.json`
 - `models/`
-- `meta.json`
 
-`meta.json` には環境情報や git commit が含まれます。
-
-`outputs/experiments.csv` に各実験のサマリが追記されます。
+`outputs/experiments.jsonl` に各実験のサマリが追記されます。

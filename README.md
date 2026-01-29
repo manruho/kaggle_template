@@ -5,7 +5,7 @@ Kaggle の実験を **「Notebookは薄く」**、**「ロジックは `src/` �
 - Kaggle Notebook から **GitHub を clone（Internet ON）** して使える
 - Internet OFF のコンペでも **Kaggle Dataset に添付**して使える
 - Notebook 側は基本 **`load_config` → `run(cfg)` の呼び出しだけ**
-- 実験成果物は `outputs/<experiment_name>/` に保存して再現性を担保
+- 実験成果物は `outputs/<experiment_name>/` に保存して再現性を担保（`meta/` と `submission/` を生成）
 
 > 目標：
 > **「実験を増やす＝configを増やす」**
@@ -189,7 +189,7 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
 
 1. 新規コンペ用の `configs/comp_xxx/` を作成し、`train.json` などを置く。
 2. Notebook から `load_config` → `run(cfg)` を呼び、OOF・提出を生成。
-3. 結果は `outputs/<experiment_name>/` に `submission.csv`, `oof.csv`, `cv_scores.json`, `config_used.json`, `meta.json` ほかとして保存。
+3. 結果は `outputs/<experiment_name>/` に `submission/` と `meta/` を含む成果物を保存。
 4. Kaggle の提出や外部分析は保存された成果物を参照するだけで良い。
 5. 改良（特徴量やモデル）を行ったら GitHub に commit → push、Notebook は再 clone or Dataset 更新のみ。
 
@@ -199,23 +199,23 @@ Internet が OFF のコンペでも同じワークフローでテンプレート
 
 ```
 outputs/<experiment_name>/
-  submission.csv
+  submission/
+    submission.csv
+  meta/
+    config.snapshot.json
+    git.txt
+    env.txt
+    cv_scores.json
+    run_summary.json
   oof.csv
   oof.parquet
   pred_test.parquet
   pred_test.npy
-  cv_scores.json
-  config_used.json
-  run_summary.json
-  env.txt
-  pip_freeze.txt
   folds.csv
-  submission_validation.json
   models/
-  meta.json
 
 outputs/
-  experiments.csv
+  experiments.jsonl
 ```
 
 * `submission.csv`：提出用
